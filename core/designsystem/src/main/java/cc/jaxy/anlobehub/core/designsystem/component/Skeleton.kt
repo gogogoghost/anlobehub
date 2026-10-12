@@ -97,7 +97,7 @@ fun SkeletonList(
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxWidth(),
         userScrollEnabled = false,
     ) {
         items(itemCount) {

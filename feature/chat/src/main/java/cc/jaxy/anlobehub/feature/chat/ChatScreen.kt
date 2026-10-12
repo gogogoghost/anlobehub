@@ -470,6 +470,7 @@ private fun ChatContent(
                 )
                 if (topicsLoading && topics.isEmpty()) {
                     SkeletonList(
+                        itemCount = 1,
                         modifier = Modifier.fillMaxWidth().padding(vertical = MaterialTheme.spacing.s),
                     )
                 } else if (topics.isEmpty()) {
