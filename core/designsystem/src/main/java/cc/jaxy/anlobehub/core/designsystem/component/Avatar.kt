@@ -31,6 +31,8 @@ import coil3.request.crossfade
 import coil3.size.Dimension
 import coil3.size.Size
 import coil3.size.SizeResolver
+import coil3.toBitmap
+import kotlinx.coroutines.launch
 import cc.jaxy.anlobehub.core.designsystem.theme.AnlobehubTheme
 
 /** Avatar decode target: xxxhdpi 56dp ≈ 224px, rounded up for crispness. */
@@ -57,6 +59,12 @@ fun InitialAvatar(
     avatarUrl: String? = null,
     size: Dp = 40.dp,
     modifier: Modifier = Modifier,
+    /**
+     * True while the profile is still loading: shows a neutral blank disc
+     * instead of the initial fallback (which would flash before the real
+     * avatar). Only show the initial once loading settles without an image.
+     */
+    loading: Boolean = false,
 ) {
     val (container, onContainer) = avatarColors(name)
     val trimmed = avatarUrl?.trim().orEmpty()
@@ -76,32 +84,61 @@ fun InitialAvatar(
                 .then(modifier),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = glyph ?: initial,
-            style = if (glyph != null) {
-                MaterialTheme.typography.headlineSmall
-            } else {
-                MaterialTheme.typography.titleMedium
-            },
-            color = onContainer,
-        )
+        if (loading && glyph == null) {
+            // Blank disc with a subtle spinner slot; content arrives shortly.
+            androidx.compose.material3.CircularProgressIndicator(
+                modifier = Modifier.size(size * 0.45f),
+                strokeWidth = 2.dp,
+                color = onContainer.copy(alpha = 0.6f),
+            )
+        } else {
+            Text(
+                text = glyph ?: initial,
+                style = if (glyph != null) {
+                    MaterialTheme.typography.headlineSmall
+                } else {
+                    MaterialTheme.typography.titleMedium
+                },
+                color = onContainer,
+            )
+        }
         if (glyph == null && trimmed.isImageUrl()) {
-            // 圆形裁剪 + 裁剪填充；占位/失败时 AsyncImage 无内容，透出底层首字即回退
+            val context = LocalContext.current
+            // Sync local snapshot first: shows instantly on cold start,
+            // then Coil swaps in the full-res image without flashing.
+            val snapshot = remember(trimmed) { AvatarCache.get(context, trimmed) }
+            if (snapshot != null) {
+                androidx.compose.foundation.Image(
+                    bitmap = snapshot,
+                    contentDescription = null,
+                    modifier = Modifier.matchParentSize().clip(CircleShape),
+                    contentScale = ContentScale.Crop,
+                )
+            }
+            // 圆形裁剪 + 裁剪填充；占位/失败时 AsyncImage 无内容，透出底层回退
             // URL 切换时保留旧图直到新图就绪（placeholderMemoryCacheKey 命中
             // 内存中的上一张），避免闪回首字。
             var lastUrl by remember { mutableStateOf<String?>(null) }
             AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
+                model = ImageRequest.Builder(context)
                     .data(trimmed)
                     .memoryCachePolicy(CachePolicy.ENABLED)
                     .diskCachePolicy(CachePolicy.ENABLED)
                     .diskCacheKey(trimmed)
                     .placeholderMemoryCacheKey(lastUrl?.let { coil3.memory.MemoryCache.Key(it) })
                     .listener(
-                        onSuccess = { _, _ -> lastUrl = trimmed },
+                        onSuccess = { _, result ->
+                            lastUrl = trimmed
+                            // Persist a thumbnail for instant cold-start paint.
+                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                                runCatching {
+                                    AvatarCache.put(context, trimmed, result.image.toBitmap())
+                                }
+                            }
+                        },
                     )
                     .size(SizeResolver(Size(Dimension(OUTPUT_PX), Dimension(OUTPUT_PX))))
-                    .crossfade(true)
+                    .crossfade(snapshot == null)
                     .build(),
                 contentDescription = null,
                 modifier = Modifier.matchParentSize().clip(CircleShape),

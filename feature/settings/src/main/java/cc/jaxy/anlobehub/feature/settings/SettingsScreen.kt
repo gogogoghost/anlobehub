@@ -144,6 +144,7 @@ private fun SettingsContent(
                     dynamicColor = dynamicColor,
                     onDynamicColorChange = { viewModel.setDynamicColor(it) },
                     uploadingAvatar = uiState.uploadingAvatar,
+                    profileLoading = uiState.loading,
                     onAvatarPicked = { uri ->
                         val prepared = AvatarImage.prepare(screenContext, uri)
                         if (prepared != null) {
@@ -208,6 +209,7 @@ private fun SettingsBody(
     dynamicColor: Boolean = false,
     onDynamicColorChange: (Boolean) -> Unit = {},
     uploadingAvatar: Boolean = false,
+    profileLoading: Boolean = false,
     onAvatarPicked: (android.net.Uri) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -230,6 +232,7 @@ private fun SettingsBody(
                 error = profileError,
                 onRetry = onRetry,
                 uploadingAvatar = uploadingAvatar,
+                profileLoading = profileLoading,
                 onAvatarClick = { imagePicker.launch("image/*") },
                 modifier = Modifier.padding(horizontal = spacing.l),
             )
@@ -345,6 +348,7 @@ private fun AccountCard(
     error: UiText?,
     onRetry: () -> Unit,
     uploadingAvatar: Boolean = false,
+    profileLoading: Boolean = false,
     onAvatarClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -363,6 +367,7 @@ private fun AccountCard(
                     name = displayName,
                     avatarUrl = profile?.avatar,
                     size = 56.dp,
+                    loading = profileLoading && profile?.avatar.isNullOrBlank(),
                     modifier = Modifier.clickable(
                         enabled = profile != null && !uploadingAvatar,
                         onClick = onAvatarClick,

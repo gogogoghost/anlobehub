@@ -44,7 +44,15 @@ class SettingsViewModel @Inject constructor(
         val error: UiText? = null,
     )
 
-    private val _uiState = MutableStateFlow(UiState())
+    // Seed synchronously: persisted avatar URL paints the snapshot on the
+    // very first frame; memory cache (when warm) fills the rest.
+    private val _uiState = MutableStateFlow(
+        UiState(
+            profile = userRepository.cachedProfile()
+                ?: userRepository.persistedAvatar()?.let { UserProfile(avatar = it) },
+            loading = true,
+        ),
+    )
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     private val _signedOutEvent = MutableSharedFlow<Unit>()

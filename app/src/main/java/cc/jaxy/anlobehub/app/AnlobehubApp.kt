@@ -48,6 +48,7 @@ class AnlobehubApp : Application() {
                         .maxSizePercent(this, 0.25)
                         .build()
                 }
+                .logger(coil3.util.DebugLogger())
                 .diskCache {
                     DiskCache.Builder()
                         .directory(cacheDir.resolve("coil").toOkioPath())

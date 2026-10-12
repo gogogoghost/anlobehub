@@ -1,7 +1,15 @@
 package cc.jaxy.anlobehub.core.data.user
 
+import android.content.Context
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
 import cc.jaxy.anlobehub.core.common.result.AnResult
 import cc.jaxy.anlobehub.core.network.trpc.TrpcClient
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.serialization.Serializable
@@ -19,6 +27,8 @@ data class UserProfile(
     val username: String? = null,
 )
 
+private val Context.userDataStore by preferencesDataStore(name = "user")
+
 interface UserRepository {
     suspend fun getUserState(baseUrl: String): AnResult<UserProfile>
 
@@ -28,28 +38,46 @@ interface UserRepository {
     /** Last known profile (memory cache); null until first success. */
     fun cachedProfile(): UserProfile?
 
+    /** Blocking read of the persisted avatar URL (cold-start first frame). */
+    fun persistedAvatar(): String?
+
     fun clearCache()
 }
 
 @Singleton
 class UserRepositoryImpl @Inject constructor(
     private val trpc: TrpcClient,
+    @param:ApplicationContext private val context: Context,
 ) : UserRepository {
+
+    private val avatarKey = stringPreferencesKey("avatar_url")
 
     @Volatile
     private var cache: UserProfile? = null
 
     override suspend fun getUserState(baseUrl: String): AnResult<UserProfile> =
         trpc.query(baseUrl, "user.getUserState", null) { it.toUserProfile() }.also { result ->
-            if (result is AnResult.Ok) cache = result.value
+            if (result is AnResult.Ok) {
+                cache = result.value
+                // Persist avatar URL for cold-start first frame.
+                val avatar = result.value.avatar?.takeIf { it.isNotBlank() }
+                try {
+                    context.userDataStore.edit { prefs ->
+                        if (avatar != null) prefs[avatarKey] = avatar
+                        else prefs.remove(avatarKey)
+                    }
+                } catch (_: Exception) {
+                }
+            }
         }
 
-    override suspend fun updateAvatar(baseUrl: String, url: String): AnResult<Unit> {
-        val input = kotlinx.serialization.json.JsonPrimitive(url)
-        return trpc.mutate(baseUrl, "user.updateAvatar", input) { }.also { result ->
-            if (result is AnResult.Ok) {
-                cache = cache?.copy(avatar = url)
-            }
+    override fun persistedAvatar(): String? {
+        return try {
+            runBlocking {
+                context.userDataStore.data.map { it[avatarKey] }.first()
+            }?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -57,6 +85,19 @@ class UserRepositoryImpl @Inject constructor(
 
     override fun clearCache() {
         cache = null
+    }
+
+    override suspend fun updateAvatar(baseUrl: String, url: String): AnResult<Unit> {
+        val input = kotlinx.serialization.json.JsonPrimitive(url)
+        return trpc.mutate(baseUrl, "user.updateAvatar", input) { }.also { result ->
+            if (result is AnResult.Ok) {
+                cache = cache?.copy(avatar = url)
+                try {
+                    context.userDataStore.edit { it[avatarKey] = url }
+                } catch (_: Exception) {
+                }
+            }
+        }
     }
 }
 
