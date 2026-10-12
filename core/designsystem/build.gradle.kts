@@ -29,4 +29,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network)
     implementation(libs.markdown.m3)
+    implementation(libs.commonmark)
+    implementation(libs.commonmark.tables)
+    implementation(libs.commonmark.strikethrough)
 }

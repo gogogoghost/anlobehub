@@ -20,6 +20,7 @@ serialization = "1.11.0"
 coroutines = "1.11.0"
 coil = "3.6.3"
 markdown = "0.45.0"
+commonmark = "0.30.1"
 security-crypto = "1.1.0"
 junit = "4.13.2"
 
@@ -59,6 +60,9 @@ hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.r
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
 coil-network = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
 markdown-m3 = { group = "com.mikepenz", name = "multiplatform-markdown-renderer-m3", version.ref = "markdown" }
+commonmark = { group = "org.commonmark", name = "commonmark", version.ref = "commonmark" }
+commonmark-tables = { group = "org.commonmark", name = "commonmark-ext-gfm-tables", version.ref = "commonmark" }
+commonmark-strikethrough = { group = "org.commonmark", name = "commonmark-ext-gfm-strikethrough", version.ref = "commonmark" }
 security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "security-crypto" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 
