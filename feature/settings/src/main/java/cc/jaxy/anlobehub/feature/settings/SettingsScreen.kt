@@ -3,9 +3,11 @@ package cc.jaxy.anlobehub.feature.settings
 import cc.jaxy.anlobehub.core.designsystem.R as DsR
 import android.widget.Toast
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,6 +27,7 @@ import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -61,6 +64,7 @@ import cc.jaxy.anlobehub.core.designsystem.component.ErrorBox
 import cc.jaxy.anlobehub.core.designsystem.component.InitialAvatar
 import cc.jaxy.anlobehub.core.data.user.UserProfile
 import cc.jaxy.anlobehub.core.designsystem.component.AnTopBar
+import cc.jaxy.anlobehub.core.designsystem.component.AvatarImage
 import cc.jaxy.anlobehub.core.designsystem.component.AppearanceCard
 import cc.jaxy.anlobehub.core.designsystem.component.ModelBadge
 import cc.jaxy.anlobehub.core.designsystem.component.SectionTitle
@@ -95,12 +99,24 @@ private fun SettingsContent(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val theme by viewModel.theme.collectAsStateWithLifecycle()
     val dynamicColor by viewModel.dynamicColor.collectAsStateWithLifecycle()
+    val screenContext = androidx.compose.ui.platform.LocalContext.current
     val language by viewModel.language.collectAsStateWithLifecycle()
     var showSignOutDialog by rememberSaveable { mutableStateOf(false) }
     var showSwitchDialog by rememberSaveable { mutableStateOf(false) }
+    val snackbar = androidx.compose.material3.SnackbarHostState()
+    val errorText = uiState.error?.resolve()
+    androidx.compose.runtime.LaunchedEffect(errorText) {
+        // Transient errors (avatar upload etc.) surface here; full-screen
+        // states above only handle the signed-out case.
+        if (errorText != null && uiState.profile != null) {
+            snackbar.showSnackbar(errorText)
+            viewModel.dismissError()
+        }
+    }
 
     Scaffold(
         topBar = { AnTopBar(title = stringResource(DsR.string.common_settings_title), onBack = null) },
+        snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) },
     ) { padding ->
         when {
             uiState.loading && uiState.profile == null && uiState.error == null ->
@@ -127,6 +143,13 @@ private fun SettingsContent(
                     onLanguageChange = { viewModel.setLanguage(it) },
                     dynamicColor = dynamicColor,
                     onDynamicColorChange = { viewModel.setDynamicColor(it) },
+                    uploadingAvatar = uiState.uploadingAvatar,
+                    onAvatarPicked = { uri ->
+                        val prepared = AvatarImage.prepare(screenContext, uri)
+                        if (prepared != null) {
+                            viewModel.uploadAvatar(prepared.bytes, prepared.mime)
+                        }
+                    },
                     modifier = Modifier.padding(padding),
                 )
         }
@@ -184,9 +207,14 @@ private fun SettingsBody(
     onLanguageChange: (AppLanguage) -> Unit,
     dynamicColor: Boolean = false,
     onDynamicColorChange: (Boolean) -> Unit = {},
+    uploadingAvatar: Boolean = false,
+    onAvatarPicked: (android.net.Uri) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val spacing = MaterialTheme.spacing
+    val imagePicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.GetContent(),
+    ) { uri -> if (uri != null) onAvatarPicked(uri) }
     val clipboard = LocalClipboard.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -201,6 +229,8 @@ private fun SettingsBody(
                 profile = profile,
                 error = profileError,
                 onRetry = onRetry,
+                uploadingAvatar = uploadingAvatar,
+                onAvatarClick = { imagePicker.launch("image/*") },
                 modifier = Modifier.padding(horizontal = spacing.l),
             )
         }
@@ -314,6 +344,8 @@ private fun AccountCard(
     profile: UserProfile?,
     error: UiText?,
     onRetry: () -> Unit,
+    uploadingAvatar: Boolean = false,
+    onAvatarClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val spacing = MaterialTheme.spacing
@@ -326,7 +358,23 @@ private fun AccountCard(
             modifier = Modifier.padding(spacing.l),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            InitialAvatar(name = displayName, avatarUrl = profile?.avatar, size = 56.dp)
+            Box(contentAlignment = Alignment.Center) {
+                InitialAvatar(
+                    name = displayName,
+                    avatarUrl = profile?.avatar,
+                    size = 56.dp,
+                    modifier = Modifier.clickable(
+                        enabled = profile != null && !uploadingAvatar,
+                        onClick = onAvatarClick,
+                    ),
+                )
+                if (uploadingAvatar) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(28.dp),
+                        strokeWidth = 2.dp,
+                    )
+                }
+            }
             Spacer(Modifier.width(spacing.m))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

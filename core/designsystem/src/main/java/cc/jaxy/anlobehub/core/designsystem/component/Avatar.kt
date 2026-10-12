@@ -10,6 +10,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -23,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
+import coil3.request.crossfade
 import coil3.size.Dimension
 import coil3.size.Size
 import coil3.size.SizeResolver
@@ -64,10 +69,11 @@ fun InitialAvatar(
     val initial = name?.trim()?.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
     Box(
         modifier =
-            modifier
+            Modifier
                 .size(size)
                 .clip(CircleShape)
-                .background(container),
+                .background(container)
+                .then(modifier),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -81,13 +87,21 @@ fun InitialAvatar(
         )
         if (glyph == null && trimmed.isImageUrl()) {
             // 圆形裁剪 + 裁剪填充；占位/失败时 AsyncImage 无内容，透出底层首字即回退
+            // URL 切换时保留旧图直到新图就绪（placeholderMemoryCacheKey 命中
+            // 内存中的上一张），避免闪回首字。
+            var lastUrl by remember { mutableStateOf<String?>(null) }
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(trimmed)
                     .memoryCachePolicy(CachePolicy.ENABLED)
                     .diskCachePolicy(CachePolicy.ENABLED)
                     .diskCacheKey(trimmed)
+                    .placeholderMemoryCacheKey(lastUrl?.let { coil3.memory.MemoryCache.Key(it) })
+                    .listener(
+                        onSuccess = { _, _ -> lastUrl = trimmed },
+                    )
                     .size(SizeResolver(Size(Dimension(OUTPUT_PX), Dimension(OUTPUT_PX))))
+                    .crossfade(true)
                     .build(),
                 contentDescription = null,
                 modifier = Modifier.matchParentSize().clip(CircleShape),

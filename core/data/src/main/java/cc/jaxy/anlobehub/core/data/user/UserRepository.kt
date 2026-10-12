@@ -22,6 +22,9 @@ data class UserProfile(
 interface UserRepository {
     suspend fun getUserState(baseUrl: String): AnResult<UserProfile>
 
+    /** Raw string input; server rejects non-URL with INVALID_AVATAR_URL. */
+    suspend fun updateAvatar(baseUrl: String, url: String): AnResult<Unit>
+
     /** Last known profile (memory cache); null until first success. */
     fun cachedProfile(): UserProfile?
 
@@ -40,6 +43,15 @@ class UserRepositoryImpl @Inject constructor(
         trpc.query(baseUrl, "user.getUserState", null) { it.toUserProfile() }.also { result ->
             if (result is AnResult.Ok) cache = result.value
         }
+
+    override suspend fun updateAvatar(baseUrl: String, url: String): AnResult<Unit> {
+        val input = kotlinx.serialization.json.JsonPrimitive(url)
+        return trpc.mutate(baseUrl, "user.updateAvatar", input) { }.also { result ->
+            if (result is AnResult.Ok) {
+                cache = cache?.copy(avatar = url)
+            }
+        }
+    }
 
     override fun cachedProfile(): UserProfile? = cache
 

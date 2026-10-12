@@ -6,7 +6,11 @@ import cc.jaxy.anlobehub.core.common.result.AnResult
 import cc.jaxy.anlobehub.core.data.session.AuthRepository
 import cc.jaxy.anlobehub.core.data.session.AuthState
 import cc.jaxy.anlobehub.core.data.session.ServerStore
+import coil3.SingletonImageLoader
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,6 +26,7 @@ import kotlinx.coroutines.launch
  */
 @HiltViewModel
 class StartupViewModel @Inject constructor(
+    @param:ApplicationContext private val context: android.content.Context,
     private val serverStore: ServerStore,
     private val authRepository: AuthRepository,
 ) : ViewModel() {
@@ -59,6 +64,18 @@ class StartupViewModel @Inject constructor(
             }
             if (state !is AuthState.SignedIn) {
                 _authRedirect.value = Redirect.Login(baseUrl)
+            } else {
+                // Prewarm avatar into memory so Settings shows it with zero flash.
+                val avatar = state.avatar?.takeIf { it.isNotBlank() }
+                if (avatar != null) {
+                    val request = ImageRequest.Builder(context)
+                        .data(avatar)
+                        .memoryCachePolicy(CachePolicy.ENABLED)
+                        .diskCachePolicy(CachePolicy.ENABLED)
+                        .diskCacheKey(avatar)
+                        .build()
+                    runCatching { SingletonImageLoader.get(context).enqueue(request) }
+                }
             }
         }
     }

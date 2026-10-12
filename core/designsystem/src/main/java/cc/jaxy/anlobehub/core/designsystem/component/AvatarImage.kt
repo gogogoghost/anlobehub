@@ -1,4 +1,4 @@
-package cc.jaxy.anlobehub.feature.agents
+package cc.jaxy.anlobehub.core.designsystem.component
 
 import android.content.Context
 import android.graphics.Bitmap

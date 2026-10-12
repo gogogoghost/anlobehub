@@ -47,6 +47,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cc.jaxy.anlobehub.core.data.chat.AIModel
 import cc.jaxy.anlobehub.core.designsystem.component.AnTextField
+import cc.jaxy.anlobehub.core.designsystem.component.AvatarImage
 import cc.jaxy.anlobehub.core.designsystem.component.AnTopBar
 import cc.jaxy.anlobehub.core.designsystem.component.ErrorBox
 import cc.jaxy.anlobehub.core.designsystem.component.InitialAvatar

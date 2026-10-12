@@ -148,4 +148,6 @@
     <string name="providers_search_empty">No matching providers</string>
     <string name="provider_models_search_hint">Search models</string>
     <string name="provider_models_search_empty">No matching models</string>
+
+    <string name="avatar_upload_failed">Avatar upload failed</string>
 </resources>

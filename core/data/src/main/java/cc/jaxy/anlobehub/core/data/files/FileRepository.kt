@@ -60,14 +60,30 @@ class FileRepositoryImpl @Inject constructor(
             .takeIf { it.isNotBlank() } ?: "file"
         val contentType = mime.takeIf { it.isNotBlank() } ?: "application/octet-stream"
 
-        // 1. 秒传检查：已存在直接返回服务端 url（id 用 "" 占位）。
-        when (val checked = checkFileHash(baseUrl, hash)) {
+        // 1. 秒传检查：命中则跳过 PUT，但仍需 createFile 落库换正式 URL
+        // （hash 接口回的是裸 pathname，Avatar 等场景要求完整 http(s)）。
+        val checked = try {
+            kotlinx.coroutines.withTimeout(15000L) { checkFileHash(baseUrl, hash) }
+        } catch (e: Exception) {
+            return AnResult.Err(AnError("NETWORK", "hash check timed out: " + e.message))
+        }
+        var dedupPathname: String? = null
+        when (checked) {
             is AnResult.Ok -> {
-                checked.value?.takeIf { it.isNotBlank() }?.let { url ->
-                    return AnResult.Ok(UploadedFile(id = "", url = url))
-                }
+                dedupPathname = checked.value?.takeIf { it.isNotBlank() }
             }
             is AnResult.Err -> return AnResult.Err(checked.error)
+        }
+        if (dedupPathname != null) {
+            // 秒传：跳过 presign + PUT，直接落库换正式 url。
+            val input = buildJsonObject {
+                put("name", safeName)
+                put("hash", hash)
+                put("fileType", contentType)
+                put("size", bytes.size)
+                put("url", dedupPathname!!)
+            }
+            return trpc.mutate(baseUrl, "file.createFile", input) { it.toUploadedFile(dedupPathname) }
         }
 
         // 2. 取预签名 URL（pathname 透传给第 4 步的 url 字段）。

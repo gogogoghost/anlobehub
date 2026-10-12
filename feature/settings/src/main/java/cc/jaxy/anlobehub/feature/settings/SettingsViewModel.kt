@@ -8,6 +8,7 @@ import cc.jaxy.anlobehub.core.common.preferences.AppTheme
 import cc.jaxy.anlobehub.core.data.preferences.UiPreferencesStore
 import cc.jaxy.anlobehub.core.data.session.AuthRepository
 import cc.jaxy.anlobehub.core.data.session.AuthState
+import cc.jaxy.anlobehub.core.data.files.FileRepository
 import cc.jaxy.anlobehub.core.data.session.ServerStore
 import cc.jaxy.anlobehub.core.data.user.UserProfile
 import cc.jaxy.anlobehub.core.data.user.UserRepository
@@ -31,6 +32,7 @@ class SettingsViewModel @Inject constructor(
     private val serverStore: ServerStore,
     private val authRepository: AuthRepository,
     private val userRepository: UserRepository,
+    private val fileRepository: FileRepository,
     private val uiPreferencesStore: UiPreferencesStore,
 ) : ViewModel() {
 
@@ -38,6 +40,7 @@ class SettingsViewModel @Inject constructor(
         val baseUrl: String? = null,
         val profile: UserProfile? = null,
         val loading: Boolean = false,
+        val uploadingAvatar: Boolean = false,
         val error: UiText? = null,
     )
 
@@ -132,6 +135,60 @@ class SettingsViewModel @Inject constructor(
         }
     }
     /** 切换服务器：清空 [ServerStore] 后由父通过 [switchServerEvent] 导航。 */
+    /** Uploads a prepared avatar image, then points the profile at it. */
+    fun uploadAvatar(bytes: ByteArray, mime: String) {
+        if (_uiState.value.uploadingAvatar) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(uploadingAvatar = true, error = null)
+            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
+            if (baseUrl.isNullOrBlank()) {
+                _uiState.value = _uiState.value.copy(
+                    uploadingAvatar = false,
+                    error = UiText.Res(R.string.no_server),
+                )
+                return@launch
+            }
+            val url = when (
+                val uploaded = fileRepository.uploadFile(
+                    baseUrl = baseUrl,
+                    name = "avatar.webp",
+                    mime = mime,
+                    bytes = bytes,
+                )
+            ) {
+                is AnResult.Ok -> uploaded.value.url?.takeIf { it.isNotBlank() }
+                is AnResult.Err -> {
+                    _uiState.value = _uiState.value.copy(
+                        uploadingAvatar = false,
+                        error = uploaded.error.toUiText(),
+                    )
+                    return@launch
+                }
+            }
+            if (url == null) {
+                _uiState.value = _uiState.value.copy(
+                    uploadingAvatar = false,
+                    error = UiText.Res(R.string.avatar_upload_failed),
+                )
+                return@launch
+            }
+            when (val updated = userRepository.updateAvatar(baseUrl, url)) {
+                is AnResult.Ok -> _uiState.value = _uiState.value.copy(
+                    uploadingAvatar = false,
+                    profile = _uiState.value.profile?.copy(avatar = url),
+                )
+                is AnResult.Err -> _uiState.value = _uiState.value.copy(
+                    uploadingAvatar = false,
+                    error = updated.error.toUiText(),
+                )
+            }
+        }
+    }
+
+    fun dismissError() {
+        _uiState.value = _uiState.value.copy(error = null)
+    }
+
     fun switchServer() {
         viewModelScope.launch {
             serverStore.clear()
