@@ -94,6 +94,7 @@ private fun SettingsContent(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val theme by viewModel.theme.collectAsStateWithLifecycle()
+    val dynamicColor by viewModel.dynamicColor.collectAsStateWithLifecycle()
     val language by viewModel.language.collectAsStateWithLifecycle()
     var showSignOutDialog by rememberSaveable { mutableStateOf(false) }
     var showSwitchDialog by rememberSaveable { mutableStateOf(false) }
@@ -124,6 +125,8 @@ private fun SettingsContent(
                     language = language,
                     onThemeChange = { viewModel.setTheme(it) },
                     onLanguageChange = { viewModel.setLanguage(it) },
+                    dynamicColor = dynamicColor,
+                    onDynamicColorChange = { viewModel.setDynamicColor(it) },
                     modifier = Modifier.padding(padding),
                 )
         }
@@ -179,6 +182,8 @@ private fun SettingsBody(
     language: AppLanguage,
     onThemeChange: (AppTheme) -> Unit,
     onLanguageChange: (AppLanguage) -> Unit,
+    dynamicColor: Boolean = false,
+    onDynamicColorChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val spacing = MaterialTheme.spacing
@@ -225,6 +230,8 @@ private fun SettingsBody(
                 language = language,
                 onThemeChange = onThemeChange,
                 onLanguageChange = onLanguageChange,
+                dynamicColor = dynamicColor,
+                onDynamicColorChange = onDynamicColorChange,
                 modifier = Modifier.padding(horizontal = spacing.l),
             )
         }

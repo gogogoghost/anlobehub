@@ -48,4 +48,7 @@
     <string name="ds_language_system">Follow system</string>
     <string name="ds_language_chinese">Chinese</string>
     <string name="ds_language_english">English</string>
+
+    <string name="ds_dynamic_color_title">Dynamic color</string>
+    <string name="ds_dynamic_color_subtitle">Follow system wallpaper colors (Android 12+)</string>
 </resources>

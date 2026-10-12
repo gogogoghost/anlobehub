@@ -1,6 +1,7 @@
 package cc.jaxy.anlobehub.core.data.preferences
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -25,6 +26,7 @@ class UiPreferencesStore @Inject constructor(
 ) {
     private val languageKey = stringPreferencesKey("app_language")
     private val themeKey = stringPreferencesKey("app_theme")
+    private val dynamicColorKey = booleanPreferencesKey("dynamic_color")
 
     companion object {
         private val staticLanguageKey = stringPreferencesKey("app_language")
@@ -50,6 +52,9 @@ class UiPreferencesStore @Inject constructor(
     val theme: Flow<AppTheme> =
         context.uiPrefsDataStore.data.map { AppTheme.fromName(it[themeKey]) }
 
+    val dynamicColor: Flow<Boolean> =
+        context.uiPrefsDataStore.data.map { it[dynamicColorKey] ?: false }
+
     suspend fun setLanguage(language: AppLanguage) {
         context.uiPrefsDataStore.edit {
             if (language == AppLanguage.SYSTEM) {
@@ -58,6 +63,10 @@ class UiPreferencesStore @Inject constructor(
                 it[languageKey] = language.tag.orEmpty()
             }
         }
+    }
+
+    suspend fun setDynamicColor(enabled: Boolean) {
+        context.uiPrefsDataStore.edit { it[dynamicColorKey] = enabled }
     }
 
     suspend fun setTheme(theme: AppTheme) {

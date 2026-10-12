@@ -7,11 +7,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -57,6 +59,8 @@ fun AppearanceCard(
     onThemeChange: (AppTheme) -> Unit,
     onLanguageChange: (AppLanguage) -> Unit,
     modifier: Modifier = Modifier,
+    dynamicColor: Boolean = false,
+    onDynamicColorChange: (Boolean) -> Unit = {},
 ) {
     var showThemeDialog by rememberSaveable { mutableStateOf(false) }
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
@@ -67,6 +71,16 @@ fun AppearanceCard(
                 title = stringResource(R.string.ds_theme_title),
                 subtitle = themeLabel(theme),
                 onClick = { showThemeDialog = true },
+            )
+            HorizontalDivider()
+            SettingRow(
+                icon = Icons.Filled.ColorLens,
+                title = stringResource(R.string.ds_dynamic_color_title),
+                subtitle = stringResource(R.string.ds_dynamic_color_subtitle),
+                onClick = { onDynamicColorChange(!dynamicColor) },
+                trailing = {
+                    Switch(checked = dynamicColor, onCheckedChange = onDynamicColorChange)
+                },
             )
             HorizontalDivider()
             SettingRow(

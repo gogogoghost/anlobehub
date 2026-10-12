@@ -45,4 +45,7 @@
     <string name="ds_language_system">跟随系统</string>
     <string name="ds_language_chinese">中文</string>
     <string name="ds_language_english">English</string>
+
+    <string name="ds_dynamic_color_title">动态取色</string>
+    <string name="ds_dynamic_color_subtitle">跟随系统壁纸颜色（Android 12+）</string>
 </resources>

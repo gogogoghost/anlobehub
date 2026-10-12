@@ -146,11 +146,18 @@ class SettingsViewModel @Inject constructor(
     val theme: StateFlow<AppTheme> = uiPreferencesStore.theme
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppTheme.SYSTEM)
 
+    val dynamicColor: StateFlow<Boolean> = uiPreferencesStore.dynamicColor
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     fun setLanguage(language: AppLanguage) {
         viewModelScope.launch { uiPreferencesStore.setLanguage(language) }
     }
 
     fun setTheme(theme: AppTheme) {
         viewModelScope.launch { uiPreferencesStore.setTheme(theme) }
+    }
+
+    fun setDynamicColor(enabled: Boolean) {
+        viewModelScope.launch { uiPreferencesStore.setDynamicColor(enabled) }
     }
 }

@@ -22,6 +22,8 @@ class ThemeViewModel @Inject constructor(
 ) : ViewModel() {
     val theme: StateFlow<AppTheme> = uiPreferences.theme
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppTheme.SYSTEM)
+    val dynamicColor: StateFlow<Boolean> = uiPreferences.dynamicColor
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 }
 
 /**
@@ -35,8 +37,10 @@ fun AnlobehubAppTheme(
     content: @Composable () -> Unit,
 ) {
     val theme by viewModel.theme.collectAsStateWithLifecycle()
+    val dynamicColor by viewModel.dynamicColor.collectAsStateWithLifecycle()
     val systemDark = isSystemInDarkTheme()
     AnlobehubTheme(
+        dynamicColor = dynamicColor,
         darkTheme = when (theme) {
             AppTheme.SYSTEM -> systemDark
             AppTheme.LIGHT -> false
