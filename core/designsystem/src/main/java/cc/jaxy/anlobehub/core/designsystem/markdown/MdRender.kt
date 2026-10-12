@@ -117,16 +117,7 @@ private fun MdRichText(
                 val span = SpanStyle(
                     fontWeight = if (run.bold) FontWeight.Bold else null,
                     fontStyle = if (run.italic) FontStyle.Italic else null,
-                    textDecoration = buildList {
-                        if (run.strike) add(TextDecoration.LineThrough)
-                        if (run.link != null) add(TextDecoration.Underline)
-                    }.let {
-                        when {
-                            it.isEmpty() -> null
-                            it.size == 1 -> it[0]
-                            else -> TextDecoration.combine(it)
-                        }
-                    },
+                    textDecoration = if (run.strike) TextDecoration.LineThrough else null,
                     color = if (run.link != null) primary else androidx.compose.ui.graphics.Color.Unspecified,
                     fontFamily = if (run.code) FontFamily.Monospace else null,
                     background = if (run.code) codeBg.copy(alpha = 0.6f) else androidx.compose.ui.graphics.Color.Unspecified,
