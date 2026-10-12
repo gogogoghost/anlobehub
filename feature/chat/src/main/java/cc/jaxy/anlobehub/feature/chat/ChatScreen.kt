@@ -549,13 +549,17 @@ private fun MessageRow(message: ChatMessage) {
             color = MaterialTheme.colorScheme.primaryContainer,
         ) {
             Column(modifier = Modifier.padding(MaterialTheme.spacing.l)) {
+                // Container wraps the whole bubble so tapping padding or the
+                // timestamp clears the selection (matches assistant side).
                 SelectionContainer {
-                    Text(
-                        text = message.content.ifBlank { stringResource(R.string.chat_empty_message) },
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    Column {
+                        Text(
+                            text = message.content.ifBlank { stringResource(R.string.chat_empty_message) },
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Timestamp(createdAt = message.createdAt)
+                    }
                 }
-                Timestamp(createdAt = message.createdAt)
             }
         }
     }
