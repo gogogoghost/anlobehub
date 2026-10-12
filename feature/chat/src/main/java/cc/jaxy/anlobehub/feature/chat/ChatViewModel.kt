@@ -10,6 +10,7 @@ import cc.jaxy.anlobehub.core.data.chat.ChatMessage
 import cc.jaxy.anlobehub.core.data.chat.ChatTopic
 import cc.jaxy.anlobehub.core.designsystem.text.UiText
 import cc.jaxy.anlobehub.core.designsystem.text.toUiText
+import cc.jaxy.anlobehub.core.data.agent.AgentRepository
 import cc.jaxy.anlobehub.core.data.chat.MessageRepository
 import cc.jaxy.anlobehub.core.data.chat.ModelRepository
 import cc.jaxy.anlobehub.core.data.chat.TopicRepository
@@ -23,6 +24,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,6 +38,7 @@ class ChatViewModel @Inject constructor(
     private val messageRepository: MessageRepository,
     private val topicRepository: TopicRepository,
     private val modelRepository: ModelRepository,
+    private val agentRepository: AgentRepository,
     private val fileRepository: FileRepository,
     private val agentApi: AgentApi,
     private val gatewaySocket: GatewaySocket,
@@ -66,6 +69,7 @@ class ChatViewModel @Inject constructor(
         val activeTopicId: String? = null,
         val models: List<AIModel> = emptyList(),
         val activeModel: AIModel? = null,
+        val modelsLoading: Boolean = false,
         val pendingFiles: List<UploadedFile> = emptyList(),
         val uploading: Boolean = false,
     )
@@ -96,6 +100,20 @@ class ChatViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(error = UiText.Res(R.string.chat_no_server))
                 return@launch
             }
+            // Models + agent config in parallel; the agent's bound model wins
+            // over "first enabled" so sends use the right model from the start.
+            _uiState.value = _uiState.value.copy(modelsLoading = true)
+            val modelsDeferred = async { modelRepository.listModels(baseUrl) }
+            val configDeferred = async {
+                val id = effectiveAgentId()
+                if (id.isNullOrBlank()) null
+                else (agentRepository.getConfig(baseUrl, id) as? AnResult.Ok)?.value
+            }
+            val models = when (val result = modelsDeferred.await()) {
+                is AnResult.Ok -> result.value
+                is AnResult.Err -> emptyList()
+            }
+            val bound = configDeferred.await()
             // Fresh topic by default: history loads lazily via loadTopics().
             // A deep-linked topicId still needs the list to validate against.
             val needTopics = initialTopicId != null || _uiState.value.activeTopicId != null
@@ -111,13 +129,16 @@ class ChatViewModel @Inject constructor(
                 ?.takeIf { id -> topics.any { it.id == id } }
             val deepLinkTopic = initialTopicId?.takeIf { id -> topics.any { it.id == id } }
             val activeTopicId = keptTopic ?: deepLinkTopic
-            val models = when (val result = modelRepository.listModels(baseUrl)) {
-                is AnResult.Ok -> result.value
-                is AnResult.Err -> emptyList()
-            }
             val keptModel = _uiState.value.activeModel
                 ?.takeIf { current -> models.any { it.id == current.id } }
+            val boundModel = bound?.model?.takeIf { it.isNotBlank() }?.let { modelId ->
+                models.firstOrNull {
+                    it.id == modelId &&
+                        (bound.provider.isNullOrBlank() || it.providerId == bound.provider)
+                } ?: AIModel(id = modelId, providerId = bound.provider)
+            }
             val activeModel = keptModel
+                ?: boundModel
                 ?: models.firstOrNull { it.enabled != false }
                 ?: models.firstOrNull()
             _uiState.value = _uiState.value.copy(
@@ -125,6 +146,7 @@ class ChatViewModel @Inject constructor(
                 activeTopicId = activeTopicId,
                 models = models,
                 activeModel = activeModel,
+                modelsLoading = false,
             )
             loadMessages()
         }

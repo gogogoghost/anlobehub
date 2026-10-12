@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -82,6 +84,7 @@ import cc.jaxy.anlobehub.core.designsystem.component.InitialAvatar
 import cc.jaxy.anlobehub.core.designsystem.component.MarkdownText
 import cc.jaxy.anlobehub.core.designsystem.component.RefreshBox
 import cc.jaxy.anlobehub.core.designsystem.component.SkeletonList
+import cc.jaxy.anlobehub.core.designsystem.component.shimmer
 import cc.jaxy.anlobehub.core.designsystem.component.relativeTimeText
 import cc.jaxy.anlobehub.core.designsystem.text.resolve
 import cc.jaxy.anlobehub.core.designsystem.theme.AnlobehubTheme
@@ -179,6 +182,7 @@ private fun ChatScreenWired(
         activeTopicId = uiState.activeTopicId,
         models = uiState.models,
         activeModel = uiState.activeModel,
+        modelsLoading = uiState.modelsLoading,
         pendingFiles = uiState.pendingFiles,
         uploading = uiState.uploading,
         listState = listState,
@@ -209,6 +213,7 @@ private fun ChatContent(
     activeTopicId: String?,
     models: List<AIModel>,
     activeModel: AIModel?,
+    modelsLoading: Boolean = false,
     pendingFiles: List<UploadedFile>,
     uploading: Boolean,
     title: String? = null,
@@ -282,25 +287,34 @@ private fun ChatContent(
                         horizontalArrangement = Arrangement.Start,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        AssistChip(
-                            onClick = onOpenModelPicker,
-                            label = {
-                                Text(
-                                    activeModel?.displayName?.takeIf { it.isNotBlank() }
-                                        ?: activeModel?.id?.takeIf { it.isNotBlank() }
-                                        ?: stringResource(R.string.chat_default_model),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Filled.SmartToy,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(MaterialTheme.spacing.l),
-                                )
-                            },
-                        )
+                        if (modelsLoading && activeModel == null) {
+                            Box(
+                                modifier = Modifier
+                                    .size(width = 120.dp, height = 32.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .shimmer(),
+                            )
+                        } else {
+                            AssistChip(
+                                onClick = onOpenModelPicker,
+                                label = {
+                                    Text(
+                                        activeModel?.displayName?.takeIf { it.isNotBlank() }
+                                            ?: activeModel?.id?.takeIf { it.isNotBlank() }
+                                            ?: stringResource(R.string.chat_default_model),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.SmartToy,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(MaterialTheme.spacing.l),
+                                    )
+                                },
+                            )
+                        }
                     }
                     if (pendingFiles.isNotEmpty() || uploading) {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.s)) {
