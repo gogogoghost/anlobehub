@@ -33,4 +33,9 @@
 
     <string name="chat_steps_running">正在执行 %1$d 个步骤…</string>
     <string name="chat_tool_unnamed">工具调用</string>
+
+    <string name="chat_topic_search_hint">搜索会话</string>
+    <string name="chat_topic_no_match">没有匹配的会话</string>
+    <string name="chat_topic_end">没有更多会话了</string>
+    <string name="chat_topic_delete_title">删除这条会话？</string>
 </resources>

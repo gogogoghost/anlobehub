@@ -14,6 +14,14 @@ interface TopicRepository {
         sessionId: String? = null,
         agentId: String? = null,
     ): AnResult<List<ChatTopic>>
+
+    suspend fun pageTopics(
+        baseUrl: String,
+        page: Int,
+        pageSize: Int,
+        sessionId: String? = null,
+        agentId: String? = null,
+    ): AnResult<TopicPage>
     suspend fun createTopic(
         baseUrl: String,
         title: String,
@@ -38,6 +46,23 @@ class TopicRepositoryImpl @Inject constructor(
             if (!sessionId.isNullOrBlank()) put("sessionId", sessionId)
         }.takeIf { it.isNotEmpty() }
         return trpc.query(baseUrl, "topic.getTopics", input) { it.asTopicList() }
+    }
+
+    override suspend fun pageTopics(
+        baseUrl: String,
+        page: Int,
+        pageSize: Int,
+        sessionId: String?,
+        agentId: String?,
+    ): AnResult<TopicPage> {
+        val input = buildJsonObject {
+            if (!agentId.isNullOrBlank()) put("agentId", agentId)
+            if (!sessionId.isNullOrBlank()) put("sessionId", sessionId)
+            // Server paging params are `current` + `pageSize` (`page` is ignored).
+            put("current", page)
+            put("pageSize", pageSize)
+        }
+        return trpc.query(baseUrl, "topic.getTopics", input) { it.asTopicPage() }
     }
 
     override suspend fun createTopic(

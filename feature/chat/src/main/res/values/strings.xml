@@ -34,4 +34,9 @@
 
     <string name="chat_steps_running">Running %1$d steps…</string>
     <string name="chat_tool_unnamed">Tool call</string>
+
+    <string name="chat_topic_search_hint">Search conversations</string>
+    <string name="chat_topic_no_match">No matching conversations</string>
+    <string name="chat_topic_end">No more conversations</string>
+    <string name="chat_topic_delete_title">Delete this conversation?</string>
 </resources>

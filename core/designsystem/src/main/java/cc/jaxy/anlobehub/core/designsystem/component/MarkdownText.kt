@@ -40,9 +40,7 @@ fun MarkdownText(
     // Resolve `[^n]` footnote citations to inline links (upstream has no
     // footnote extension); drop the definition block at the tail.
     val cited = remember(markdown) { markdown.resolveFootnotes() }
-    // Trim to the last stable block boundary while streaming so half-written
-    // constructs (unclosed code fence / link / emphasis) don't thrash layout.
-    val content = if (streaming) cited.trimUnstableTail() else cited
+    val content = cited
     // Chat-sized headings: upstream maps h1-h3 to display styles which
     // explode in a message bubble (web renders h3 as a small section title).
     val typography = markdownTypography(
@@ -111,17 +109,14 @@ fun MarkdownText(
             }
         },
     )
-    if (streaming) {
-        StreamingMarkdown(
-            content = content,
-            typography = typography,
-            colors = colors,
-            components = components,
-            modifier = modifier,
-        )
-    } else {
-        SelectionContainer {
-            Markdown(
+    // Single render path for stream + settled: the incremental state
+    // appends deltas, so neither per-token re-parse nor a stream/final
+    // component swap can flash. SelectionContainer only wraps settled
+    // content; it mounts once because `selectable` flips a single time.
+    val selectable = !streaming
+    SelectionContainer {
+        DisableSelectionIf(streaming) {
+            UnifiedStreamingMarkdown(
                 content = content,
                 typography = typography,
                 colors = colors,
@@ -132,13 +127,22 @@ fun MarkdownText(
     }
 }
 
+@Composable
+private fun DisableSelectionIf(disabled: Boolean, content: @Composable () -> Unit) {
+    if (disabled) {
+        androidx.compose.foundation.text.selection.DisableSelection { content() }
+    } else {
+        content()
+    }
+}
+
 /**
  * Incremental streaming render: diffs against the last emitted text and
  * appends only the delta, so already-laid-out blocks never re-parse
  * (the main source of scroll jumping during generation).
  */
 @Composable
-private fun StreamingMarkdown(
+private fun UnifiedStreamingMarkdown(
     content: String,
     typography: com.mikepenz.markdown.model.MarkdownTypography,
     colors: com.mikepenz.markdown.model.MarkdownColors,

@@ -36,6 +36,7 @@ import cc.jaxy.anlobehub.feature.agents.AgentsScreen
 import cc.jaxy.anlobehub.feature.agents.AgentsViewModel
 import cc.jaxy.anlobehub.feature.auth.ServerScreen
 import cc.jaxy.anlobehub.feature.chat.ChatScreen
+import cc.jaxy.anlobehub.feature.chat.TopicHistoryScreen
 import cc.jaxy.anlobehub.feature.chat.ChatViewModel
 import cc.jaxy.anlobehub.feature.models.ModelsScreen
 import cc.jaxy.anlobehub.feature.settings.KnowledgeBasesScreen
@@ -64,6 +65,12 @@ data class ChatRoute(
     val agentId: String,
     val agentTitle: String? = null,
     val topicId: String? = null,
+)
+
+@Serializable
+data class TopicHistoryRoute(
+    val agentId: String,
+    val activeTopicId: String? = null,
 )
 
 @Serializable
@@ -277,6 +284,27 @@ fun AnlobehubNavHost() {
                             selectedProviderId = current?.providerId,
                         ),
                     )
+                },
+                onOpenHistory = { agentId, activeTopicId ->
+                    navController.navigate(
+                        TopicHistoryRoute(agentId = agentId, activeTopicId = activeTopicId),
+                    )
+                },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable<TopicHistoryRoute> { entry ->
+            val route = entry.toRoute<TopicHistoryRoute>()
+            // Chat back stack entry shares the ChatViewModel for topic select.
+            val chatEntry = remember(entry) {
+                navController.getBackStackEntry(ChatRoute::class)
+            }
+            val chatViewModel: ChatViewModel = hiltViewModel(chatEntry)
+            TopicHistoryScreen(
+                activeTopicId = route.activeTopicId,
+                onSelectTopic = { topicId: String ->
+                    chatViewModel.selectTopic(topicId)
+                    navController.popBackStack()
                 },
                 onBack = { navController.popBackStack() },
             )

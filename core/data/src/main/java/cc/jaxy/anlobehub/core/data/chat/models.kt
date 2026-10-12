@@ -186,6 +186,28 @@ fun JsonElement.asMessageList(): List<ChatMessage> {
     }
 }
 
+data class TopicPage(
+    val items: List<ChatTopic> = emptyList(),
+    val total: Int? = null,
+)
+
+fun JsonElement.asTopicPage(): TopicPage {
+    return try {
+        when (this) {
+            is JsonArray -> TopicPage(map { it.toChatTopic() }, total = size)
+            is JsonObject -> {
+                val arr = (this["items"] as? JsonArray) ?: return TopicPage()
+                val total = (this["total"] as? kotlinx.serialization.json.JsonPrimitive)
+                    ?.contentOrNull?.toIntOrNull()
+                TopicPage(arr.map { it.toChatTopic() }, total = total)
+            }
+            else -> TopicPage()
+        }
+    } catch (_: Exception) {
+        TopicPage()
+    }
+}
+
 fun JsonElement.asTopicList(): List<ChatTopic> {
     return try {
         when (this) {

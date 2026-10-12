@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
@@ -103,9 +104,14 @@ private const val MAX_ATTACH_BYTES = 10 * 1024 * 1024
 @Composable
 fun ChatScreen(
     onOpenModelPicker: (current: AIModel?) -> Unit = {},
+    onOpenHistory: (agentId: String, activeTopicId: String?) -> Unit = { _, _ -> },
     onBack: () -> Unit = {},
 ) {
-    ChatScreenWired(onOpenModelPicker = onOpenModelPicker, onBack = onBack)
+    ChatScreenWired(
+        onOpenModelPicker = onOpenModelPicker,
+        onOpenHistory = onOpenHistory,
+        onBack = onBack,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -113,6 +119,7 @@ fun ChatScreen(
 private fun ChatScreenWired(
     viewModel: ChatViewModel = hiltViewModel(),
     onOpenModelPicker: (current: AIModel?) -> Unit = {},
+    onOpenHistory: (agentId: String, activeTopicId: String?) -> Unit = { _, _ -> },
     onBack: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -196,8 +203,6 @@ private fun ChatScreenWired(
         uploading = uiState.uploading,
         listState = listState,
         snackbar = snackbar,
-        onSelectTopic = viewModel::selectTopic,
-        onLoadTopics = viewModel::loadTopics,
         onNewConversation = viewModel::newConversation,
         onOpenModelPicker = { onOpenModelPicker(uiState.activeModel) },
         onSend = { text, fileIds -> viewModel.send(text, fileIds) },
@@ -205,6 +210,9 @@ private fun ChatScreenWired(
         onAttachClick = { pickImage.launch("image/*") },
         onRemoveFile = viewModel::removePendingFile,
         onRefresh = viewModel::load,
+        onOpenHistory = {
+            onOpenHistory(viewModel.agentId, viewModel.uiState.value.activeTopicId)
+        },
     )
 }
 
@@ -233,8 +241,7 @@ private fun ChatContent(
     title: String? = null,
     listState: androidx.compose.foundation.lazy.LazyListState = rememberLazyListState(),
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
-    onSelectTopic: (String?) -> Unit = {},
-    onLoadTopics: () -> Unit = {},
+    onOpenHistory: () -> Unit = {},
     onNewConversation: () -> Unit = {},
     onOpenModelPicker: () -> Unit = {},
     onSend: (String, List<String>) -> Unit = { _, _ -> },
@@ -248,7 +255,6 @@ private fun ChatContent(
     val view = LocalView.current
     var input by rememberSaveable { mutableStateOf("") }
 
-    var showTopicHistory by remember { mutableStateOf(false) }
     var showModelDetail by remember { mutableStateOf(false) }
     val barTitle = title?.takeIf { it.isNotBlank() }
         ?: stringResource(R.string.chat_default_title)
@@ -274,7 +280,7 @@ private fun ChatContent(
                             contentDescription = stringResource(R.string.chat_topic_new_conversation),
                         )
                     }
-                    IconButton(onClick = { onLoadTopics(); showTopicHistory = true }) {
+                    IconButton(onClick = onOpenHistory) {
                         Icon(
                             imageVector = Icons.Filled.Forum,
                             contentDescription = stringResource(R.string.chat_agent_history),
@@ -487,77 +493,6 @@ private fun ChatContent(
         }
     }
 
-    if (showTopicHistory) {
-        ModalBottomSheet(onDismissRequest = { showTopicHistory = false }) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = MaterialTheme.spacing.l)
-                    .padding(bottom = MaterialTheme.spacing.xl),
-            ) {
-                Text(
-                    stringResource(R.string.chat_agent_history),
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(bottom = MaterialTheme.spacing.s),
-                )
-                if (topicsLoading && topics.isEmpty()) {
-                    SkeletonList(
-                        itemCount = 1,
-                        modifier = Modifier.fillMaxWidth().padding(vertical = MaterialTheme.spacing.s),
-                    )
-                } else if (topics.isEmpty()) {
-                    Text(
-                        stringResource(R.string.chat_topic_empty),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = MaterialTheme.spacing.m),
-                    )
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
-                    ) {
-                        items(topics, key = { it.id }) { topic ->
-                            val selected = activeTopicId == topic.id
-                            val time = relativeTimeText(topic.updatedAt ?: topic.createdAt)
-                            ListItem(
-                                headlineContent = {
-                                    Text(
-                                        topic.title?.takeIf { it.isNotBlank() }
-                                            ?: stringResource(R.string.chat_topic_untitled),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        color = if (selected) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurface
-                                        },
-                                    )
-                                },
-                                supportingContent = {
-                                    if (time.isNotBlank()) Text(time)
-                                },
-                                trailingContent = {
-                                    if (selected) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Check,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                        )
-                                    }
-                                },
-                                modifier = Modifier.clickable {
-                                    onSelectTopic(topic.id)
-                                    showTopicHistory = false
-                                },
-                            )
-                            HorizontalDivider()
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     val detailModel = activeModel
     if (showModelDetail && detailModel != null) {
         ModelDetailSheet(
@@ -591,10 +526,12 @@ private fun MessageRow(message: ChatMessage) {
             color = MaterialTheme.colorScheme.primaryContainer,
         ) {
             Column(modifier = Modifier.padding(MaterialTheme.spacing.l)) {
-                Text(
-                    text = message.content.ifBlank { stringResource(R.string.chat_empty_message) },
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                SelectionContainer {
+                    Text(
+                        text = message.content.ifBlank { stringResource(R.string.chat_empty_message) },
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
                 Timestamp(createdAt = message.createdAt)
             }
         }
