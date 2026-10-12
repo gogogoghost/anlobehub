@@ -38,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -71,7 +72,6 @@ import cc.jaxy.anlobehub.core.designsystem.theme.AnlobehubTheme
 import cc.jaxy.anlobehub.core.designsystem.theme.spacing
 import kotlinx.coroutines.launch
 
-private const val APP_VERSION = "0.1.0"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -269,8 +269,29 @@ private fun SettingsBody(
             }
         }
         item(key = "version") {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val version = remember(context) {
+                runCatching {
+                    val info = if (android.os.Build.VERSION.SDK_INT >= 33) {
+                        context.packageManager.getPackageInfo(
+                            context.packageName,
+                            android.content.pm.PackageManager.PackageInfoFlags.of(0),
+                        )
+                    } else {
+                        @Suppress("DEPRECATION")
+                        context.packageManager.getPackageInfo(context.packageName, 0)
+                    }
+                    val code = if (android.os.Build.VERSION.SDK_INT >= 28) {
+                        info.longVersionCode
+                    } else {
+                        @Suppress("DEPRECATION")
+                        info.versionCode.toLong()
+                    }
+                    "${info.versionName} ($code)"
+                }.getOrDefault("?")
+            }
             Text(
-                text = stringResource(R.string.version_format, APP_VERSION),
+                text = stringResource(R.string.version_format, version),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
