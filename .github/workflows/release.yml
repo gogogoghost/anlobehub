@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - "[0-9]*.[0-9]*/[0-9]*"
+      - "v*"
 
 permissions:
   contents: write
@@ -49,12 +49,13 @@ jobs:
       - name: Derive version from tag
         id: version
         run: |
-          # Tag rule: "<versionName>/<versionCode>", e.g. "1.0.10/10".
-          NAME="${GITHUB_REF_NAME%%/*}"
-          CODE="${GITHUB_REF_NAME#*/}"
+          # Tag rule: "v<versionName>", e.g. "v0.0.6". versionCode is the
+          # commit count (monotonic, Play-compliant).
+          NAME="${GITHUB_REF_NAME#v}"
+          CODE="$(git rev-list --count HEAD)"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
-          echo "file=anlobehub-v${NAME}(${CODE}).apk" >> "$GITHUB_OUTPUT"
+          echo "file=anlobehub-v${NAME}.apk" >> "$GITHUB_OUTPUT"
 
       - name: Assemble release APK
         env:
