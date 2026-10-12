@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Box
@@ -86,6 +88,8 @@ import cc.jaxy.anlobehub.core.designsystem.component.RefreshBox
 import cc.jaxy.anlobehub.core.designsystem.component.SkeletonList
 import cc.jaxy.anlobehub.core.designsystem.component.shimmer
 import cc.jaxy.anlobehub.core.designsystem.component.relativeTimeText
+import cc.jaxy.anlobehub.feature.models.ModelDetailSheet
+import cc.jaxy.anlobehub.feature.models.ReasoningUiState
 import cc.jaxy.anlobehub.core.designsystem.text.resolve
 import cc.jaxy.anlobehub.core.designsystem.theme.AnlobehubTheme
 import cc.jaxy.anlobehub.core.designsystem.theme.hapticTick
@@ -183,6 +187,11 @@ private fun ChatScreenWired(
         models = uiState.models,
         activeModel = uiState.activeModel,
         modelsLoading = uiState.modelsLoading,
+        reasoningConfig = uiState.reasoningConfig,
+        reasoningLoading = uiState.reasoningLoading,
+        reasoningSaving = uiState.reasoningSaving,
+        onLoadReasoning = viewModel::loadReasoning,
+        onSaveReasoning = viewModel::saveReasoning,
         pendingFiles = uiState.pendingFiles,
         uploading = uiState.uploading,
         listState = listState,
@@ -214,6 +223,11 @@ private fun ChatContent(
     models: List<AIModel>,
     activeModel: AIModel?,
     modelsLoading: Boolean = false,
+    reasoningConfig: cc.jaxy.anlobehub.core.data.chat.ReasoningConfig? = null,
+    reasoningLoading: Boolean = false,
+    reasoningSaving: Boolean = false,
+    onLoadReasoning: (cc.jaxy.anlobehub.core.data.chat.AIModel) -> Unit = {},
+    onSaveReasoning: (cc.jaxy.anlobehub.core.data.chat.AIModel, String, String?) -> Unit = { _, _, _ -> },
     pendingFiles: List<UploadedFile>,
     uploading: Boolean,
     title: String? = null,
@@ -235,6 +249,7 @@ private fun ChatContent(
     var input by rememberSaveable { mutableStateOf("") }
 
     var showTopicHistory by remember { mutableStateOf(false) }
+    var showModelDetail by remember { mutableStateOf(false) }
     val barTitle = title?.takeIf { it.isNotBlank() }
         ?: stringResource(R.string.chat_default_title)
     val sendEnabled = input.isNotBlank() && !streaming
@@ -295,28 +310,45 @@ private fun ChatContent(
                                     .shimmer(),
                             )
                         } else {
-                            AssistChip(
-                                onClick = onOpenModelPicker,
-                                label = {
+                            @OptIn(ExperimentalFoundationApi::class)
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outlineVariant,
+                                ),
+                                modifier = Modifier.combinedClickable(
+                                    onClick = onOpenModelPicker,
+                                    onLongClick = { showModelDetail = true },
+                                ),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(
+                                        horizontal = MaterialTheme.spacing.m,
+                                        vertical = MaterialTheme.spacing.s,
+                                    ),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.s),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.SmartToy,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(MaterialTheme.spacing.l),
+                                    )
                                     Text(
                                         activeModel?.displayName?.takeIf { it.isNotBlank() }
                                             ?: activeModel?.id?.takeIf { it.isNotBlank() }
                                             ?: stringResource(R.string.chat_default_model),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.labelLarge,
                                     )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Filled.SmartToy,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(MaterialTheme.spacing.l),
-                                    )
-                                },
-                            )
+                                }
+                            }
                         }
                     }
-                    if (pendingFiles.isNotEmpty() || uploading) {
+                                        if (pendingFiles.isNotEmpty() || uploading) {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.s)) {
                             items(
                                 count = pendingFiles.size,
@@ -524,6 +556,21 @@ private fun ChatContent(
                 }
             }
         }
+    }
+
+    val detailModel = activeModel
+    if (showModelDetail && detailModel != null) {
+        ModelDetailSheet(
+            model = detailModel,
+            config = reasoningConfig,
+            ui = ReasoningUiState(loading = reasoningLoading, saving = reasoningSaving),
+            snackbar = snackbar,
+            onLoad = onLoadReasoning,
+            onSave = onSaveReasoning,
+            onConsumeSaved = {},
+            onDismissError = {},
+            onDismiss = { showModelDetail = false },
+        )
     }
 }
 

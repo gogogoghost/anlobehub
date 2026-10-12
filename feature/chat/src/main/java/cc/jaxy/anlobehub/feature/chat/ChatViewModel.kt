@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import cc.jaxy.anlobehub.core.common.result.AnResult
 import cc.jaxy.anlobehub.core.data.chat.AIModel
 import cc.jaxy.anlobehub.core.data.chat.ChatMessage
+import cc.jaxy.anlobehub.core.data.chat.ReasoningConfig
 import cc.jaxy.anlobehub.core.data.chat.ChatTopic
 import cc.jaxy.anlobehub.core.designsystem.text.UiText
 import cc.jaxy.anlobehub.core.designsystem.text.toUiText
@@ -72,6 +73,10 @@ class ChatViewModel @Inject constructor(
         val modelsLoading: Boolean = false,
         val pendingFiles: List<UploadedFile> = emptyList(),
         val uploading: Boolean = false,
+        val reasoningConfig: ReasoningConfig? = null,
+        val reasoningLoading: Boolean = false,
+        val reasoningSaving: Boolean = false,
+        val reasoningSavedTick: Int = 0,
     )
 
     private val _uiState = MutableStateFlow(UiState())
@@ -254,6 +259,66 @@ class ChatViewModel @Inject constructor(
 
     fun clearError() {
         _uiState.value = _uiState.value.copy(error = null)
+    }
+
+    /** Loads reasoning config for the detail sheet (chat long-press). */
+    fun loadReasoning(model: AIModel) {
+        if (_uiState.value.reasoningLoading) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(reasoningLoading = true)
+            val baseUrl = currentBaseUrl()
+            if (baseUrl == null) {
+                _uiState.value = _uiState.value.copy(
+                    reasoningLoading = false,
+                    error = UiText.Res(R.string.chat_no_server),
+                )
+                return@launch
+            }
+            when (val result = modelRepository.getReasoningConfig(baseUrl, model.id, model.providerId.orEmpty())) {
+                is AnResult.Ok -> _uiState.value = _uiState.value.copy(
+                    reasoningConfig = result.value,
+                    reasoningLoading = false,
+                )
+                is AnResult.Err -> _uiState.value = _uiState.value.copy(
+                    reasoningLoading = false,
+                    error = result.error.toUiText(),
+                )
+            }
+        }
+    }
+
+    fun saveReasoning(model: AIModel, key: String, value: String?) {
+        if (_uiState.value.reasoningSaving) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(reasoningSaving = true)
+            val baseUrl = currentBaseUrl()
+            if (baseUrl == null) {
+                _uiState.value = _uiState.value.copy(
+                    reasoningSaving = false,
+                    error = UiText.Res(R.string.chat_no_server),
+                )
+                return@launch
+            }
+            val current = _uiState.value.reasoningConfig ?: ReasoningConfig()
+            val merged = current.raw.toMutableMap()
+            if (value.isNullOrBlank()) merged.remove(key) else merged[key] = value
+            when (val result = modelRepository.updateReasoningConfig(baseUrl, model.id, model.providerId.orEmpty(), merged)) {
+                is AnResult.Ok -> _uiState.value = _uiState.value.copy(
+                    reasoningConfig = current.copy(
+                        effort = if (key == "effort") value else current.effort,
+                        reasoningEffort = if (key == "reasoningEffort") value else current.reasoningEffort,
+                        thinkingLevel = if (key == "thinkingLevel") value else current.thinkingLevel,
+                        raw = merged.toMap(),
+                    ),
+                    reasoningSaving = false,
+                    reasoningSavedTick = _uiState.value.reasoningSavedTick + 1,
+                )
+                is AnResult.Err -> _uiState.value = _uiState.value.copy(
+                    reasoningSaving = false,
+                    error = result.error.toUiText(),
+                )
+            }
+        }
     }
 
     private suspend fun loadMessages() {

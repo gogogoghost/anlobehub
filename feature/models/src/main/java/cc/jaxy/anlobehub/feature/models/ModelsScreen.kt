@@ -130,7 +130,7 @@ private fun ModelsContent(
     selectedProviderId: String?,
     detail: AIModel?,
     reasoning: Map<String, ReasoningConfig>,
-    reasoningUi: Map<String, ModelsViewModel.ReasoningUiState>,
+    reasoningUi: Map<String, ReasoningUiState>,
     onRefresh: () -> Unit,
     onPick: (AIModel) -> Unit,
     onBack: () -> Unit,
@@ -257,7 +257,7 @@ private fun ModelsContent(
             ModelDetailSheet(
                 model = detail,
                 config = reasoning[key],
-                ui = reasoningUi[key] ?: ModelsViewModel.ReasoningUiState(),
+                ui = reasoningUi[key] ?: ReasoningUiState(),
                 snackbar = snackbar,
                 onLoad = onLoadReasoning,
                 onSave = onSaveReasoning,
@@ -269,9 +269,9 @@ private fun ModelsContent(
     }
 }
 
-private data class AbilityBadge(val icon: ImageVector, val labelRes: Int, val enabled: Boolean)
+internal data class AbilityBadge(val icon: ImageVector, val labelRes: Int, val enabled: Boolean)
 
-private fun abilityBadges(abilities: ModelAbilities): List<AbilityBadge> = listOf(
+internal fun abilityBadges(abilities: ModelAbilities): List<AbilityBadge> = listOf(
     AbilityBadge(Icons.Filled.Visibility, R.string.models_ability_vision, abilities.vision),
     AbilityBadge(Icons.Filled.Psychology, R.string.models_ability_reasoning, abilities.reasoning),
     AbilityBadge(Icons.Filled.Build, R.string.models_ability_tools, abilities.functionCall),
@@ -285,7 +285,7 @@ private fun abilityBadges(abilities: ModelAbilities): List<AbilityBadge> = listO
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AbilityChips(badges: List<AbilityBadge>, modifier: Modifier = Modifier) {
+internal fun AbilityChips(badges: List<AbilityBadge>, modifier: Modifier = Modifier) {
     if (badges.isEmpty()) return
     FlowRow(
         modifier = modifier,
@@ -307,7 +307,7 @@ private fun AbilityChips(badges: List<AbilityBadge>, modifier: Modifier = Modifi
     }
 }
 
-private fun formatTokens(tokens: Int): String = when {
+internal fun formatTokens(tokens: Int): String = when {
     tokens >= 1_000_000 -> {
         val v = tokens / 1_000_000.0
         (if (v % 1.0 == 0.0) v.toInt().toString() else "%.1f".format(v)) + "M"
@@ -321,6 +321,7 @@ private fun formatTokens(tokens: Int): String = when {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
+
 private fun ModelRow(
     model: AIModel,
     selected: Boolean,
@@ -394,148 +395,6 @@ private fun ModelRow(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ModelDetailSheet(
-    model: AIModel,
-    config: ReasoningConfig?,
-    ui: ModelsViewModel.ReasoningUiState,
-    snackbar: SnackbarHostState,
-    onLoad: (AIModel) -> Unit,
-    onSave: (AIModel, String, String?) -> Unit,
-    onConsumeSaved: (AIModel) -> Unit,
-    onDismissError: (AIModel) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val spacing = MaterialTheme.spacing
-    LaunchedEffect(model.id, model.providerId) { onLoad(model) }
-    val errorText = ui.error?.resolve()
-    LaunchedEffect(errorText) {
-        if (errorText != null) {
-            snackbar.showSnackbar(errorText)
-            onDismissError(model)
-        }
-    }
-    val savedText = stringResource(R.string.models_detail_saved)
-    LaunchedEffect(ui.saved) {
-        if (ui.saved) {
-            snackbar.showSnackbar(savedText)
-            onConsumeSaved(model)
-        }
-    }
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = spacing.l).padding(bottom = spacing.xl),
-            verticalArrangement = Arrangement.spacedBy(spacing.s),
-        ) {
-            Text(
-                model.displayName?.takeIf { it.isNotBlank() } ?: model.id,
-                style = MaterialTheme.typography.titleLarge,
-            )
-            Text(
-                listOfNotNull(model.id, model.providerName ?: model.providerId).joinToString(" · "),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            model.description?.takeIf { it.isNotBlank() }?.let {
-                Text(it, style = MaterialTheme.typography.bodyMedium)
-            }
-            val specs = buildList {
-                model.contextWindowTokens?.let { add(stringResource(R.string.models_detail_context) to formatTokens(it)) }
-                model.maxOutput?.let { add(stringResource(R.string.models_detail_output) to formatTokens(it)) }
-                model.type?.takeIf { t -> t.isNotBlank() }?.let { add(stringResource(R.string.models_detail_type) to it) }
-            }
-            if (specs.isNotEmpty()) {
-                specs.forEach { (label, value) ->
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(value, style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-            }
-            val badges = remember(model.abilities) { abilityBadges(model.abilities) }
-            AbilityChips(badges = badges)
-            if (model.abilities.reasoning) {
-                HorizontalDivider()
-                ReasoningSection(
-                    config = config,
-                    loading = ui.loading,
-                    saving = ui.saving,
-                    onSelect = { key, value -> onSave(model, key, value) },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReasoningSection(
-    config: ReasoningConfig?,
-    loading: Boolean,
-    saving: Boolean,
-    onSelect: (String, String?) -> Unit,
-) {
-    val spacing = MaterialTheme.spacing
-    Column(verticalArrangement = Arrangement.spacedBy(spacing.s)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(spacing.s)) {
-            Text(stringResource(R.string.models_detail_reasoning_title), style = MaterialTheme.typography.titleSmall)
-            if (loading || saving) CircularProgressIndicator(modifier = Modifier.height(16.dp), strokeWidth = 2.dp)
-            if (saving) Text(stringResource(R.string.models_detail_saving), style = MaterialTheme.typography.bodySmall)
-        }
-        ReasoningChoiceRow(
-            label = stringResource(R.string.models_detail_effort),
-            options = listOf("low", "medium", "high", "max"),
-            selected = config?.effort,
-            enabled = !loading && !saving,
-            onSelect = { onSelect(ReasoningKeys.EFFORT, it) },
-        )
-        ReasoningChoiceRow(
-            label = stringResource(R.string.models_detail_reasoning_effort),
-            options = listOf("low", "medium", "high"),
-            selected = config?.reasoningEffort,
-            enabled = !loading && !saving,
-            onSelect = { onSelect(ReasoningKeys.REASONING_EFFORT, it) },
-        )
-        ReasoningChoiceRow(
-            label = stringResource(R.string.models_detail_thinking_level),
-            options = listOf("minimal", "low", "medium", "high"),
-            selected = config?.thinkingLevel,
-            enabled = !loading && !saving,
-            onSelect = { onSelect(ReasoningKeys.THINKING_LEVEL, it) },
-        )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ReasoningChoiceRow(
-    label: String,
-    options: List<String>,
-    selected: String?,
-    enabled: Boolean,
-    onSelect: (String?) -> Unit,
-) {
-    val unset = stringResource(R.string.models_detail_unset)
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            val items = listOf<String?>(null) + options
-            items.forEachIndexed { index, value ->
-                SegmentedButton(
-                    selected = value == selected || (value == null && selected.isNullOrBlank()),
-                    onClick = { onSelect(value) },
-                    shape = SegmentedButtonDefaults.itemShape(index, items.size),
-                    enabled = enabled,
-                    label = { Text(value ?: unset, style = MaterialTheme.typography.labelSmall, maxLines = 1) },
-                )
-            }
-        }
-    }
-}
-
 private val previewModels = listOf(
     AIModel(
         id = "gpt-5",
@@ -561,6 +420,7 @@ private val previewModels = listOf(
 )
 
 @Preview(name = "Models-Light", showBackground = true)
+
 @Composable
 private fun ModelsLightPreview() {
     AnlobehubTheme(darkTheme = false) {

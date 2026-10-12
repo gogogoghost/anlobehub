@@ -83,12 +83,6 @@ class ModelsViewModel @Inject constructor(
     private val _reasoningUi = MutableStateFlow<Map<String, ReasoningUiState>>(emptyMap())
     val reasoningUi: StateFlow<Map<String, ReasoningUiState>> = _reasoningUi.asStateFlow()
 
-    data class ReasoningUiState(
-        val loading: Boolean = false,
-        val saving: Boolean = false,
-        val error: UiText? = null,
-        val saved: Boolean = false,
-    )
 
     fun loadReasoning(model: AIModel) {
         val key = reasoningKeyOf(model)
@@ -163,3 +157,10 @@ object ReasoningKeys {
     const val REASONING_EFFORT = "reasoningEffort"
     const val THINKING_LEVEL = "thinkingLevel"
 }
+
+data class ReasoningUiState(
+    val loading: Boolean = false,
+    val saving: Boolean = false,
+    val error: UiText? = null,
+    val saved: Boolean = false,
+)
