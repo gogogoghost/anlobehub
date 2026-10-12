@@ -58,6 +58,7 @@ class ChatViewModel @Inject constructor(
 
     data class UiState(
         val messages: List<ChatMessage> = emptyList(),
+        val messagesLoading: Boolean = false,
         val streaming: Boolean = false,
         val streamingText: String = "",
         val streamingReasoning: String = "",
@@ -185,7 +186,13 @@ class ChatViewModel @Inject constructor(
     fun selectTopic(id: String?) {
         if (_uiState.value.activeTopicId == id) return
         if (_uiState.value.streaming) stop()
-        _uiState.value = _uiState.value.copy(activeTopicId = id)
+        // Clear first + skeleton: the whole turn renders at once below.
+        _uiState.value = _uiState.value.copy(
+            activeTopicId = id,
+            messages = emptyList(),
+            messagesLoading = true,
+            error = null,
+        )
         viewModelScope.launch { loadMessages() }
     }
 
@@ -324,14 +331,22 @@ class ChatViewModel @Inject constructor(
     private suspend fun loadMessages() {
         // Fresh topic has no messages; don't query the server.
         if (_uiState.value.activeTopicId == null) {
-            _uiState.value = _uiState.value.copy(messages = emptyList(), error = null)
+            _uiState.value = _uiState.value.copy(
+                messages = emptyList(),
+                messagesLoading = false,
+                error = null,
+            )
             return
         }
         val baseUrl = currentBaseUrl()
         if (baseUrl == null) {
-            _uiState.value = _uiState.value.copy(error = UiText.Res(R.string.chat_no_server))
+            _uiState.value = _uiState.value.copy(
+                messagesLoading = false,
+                error = UiText.Res(R.string.chat_no_server),
+            )
             return
         }
+        _uiState.value = _uiState.value.copy(messagesLoading = true)
         when (
             val result = messageRepository.listMessages(
                 baseUrl,
@@ -341,10 +356,14 @@ class ChatViewModel @Inject constructor(
         ) {
             is AnResult.Ok -> _uiState.value = _uiState.value.copy(
                 messages = result.value,
+                messagesLoading = false,
                 error = null,
                 streamingSteps = emptyList(),
             )
-            is AnResult.Err -> _uiState.value = _uiState.value.copy(error = result.error.toUiText())
+            is AnResult.Err -> _uiState.value = _uiState.value.copy(
+                messagesLoading = false,
+                error = result.error.toUiText(),
+            )
         }
     }
 

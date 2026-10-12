@@ -37,7 +37,8 @@ class TopicHistoryViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
-    private var page = 1
+    // Server `current` is 0-based.
+    private var page = 0
 
     init {
         refresh()
@@ -47,8 +48,8 @@ class TopicHistoryViewModel @Inject constructor(
         if (_uiState.value.loading) return
         viewModelScope.launch {
             _uiState.value = UiState(loading = true)
-            page = 1
-            loadPage(1, initial = true)
+            page = 0
+            loadPage(0, initial = true)
         }
     }
 

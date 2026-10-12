@@ -109,13 +109,21 @@ fun MarkdownText(
             }
         },
     )
-    // Single render path for stream + settled: the incremental state
-    // appends deltas, so neither per-token re-parse nor a stream/final
-    // component swap can flash. SelectionContainer only wraps settled
-    // content; it mounts once because `selectable` flips a single time.
-    val selectable = !streaming
-    SelectionContainer {
-        DisableSelectionIf(streaming) {
+    // Settled content renders synchronously (parse + layout in one frame,
+    // no pop-in on scroll). Only the live stream uses the incremental
+    // state; the swap happens atomically with the list item swap.
+    if (!streaming) {
+        SelectionContainer {
+            Markdown(
+                content = content,
+                typography = typography,
+                colors = colors,
+                components = components,
+                modifier = modifier,
+            )
+        }
+    } else {
+        DisableSelectionIf(disabled = true) {
             UnifiedStreamingMarkdown(
                 content = content,
                 typography = typography,

@@ -183,6 +183,7 @@ private fun ChatScreenWired(
         onBack = onBack,
         title = viewModel.agentTitle?.takeIf { it.isNotBlank() },
         messages = uiState.messages,
+        messagesLoading = uiState.messagesLoading,
         streaming = uiState.streaming,
         streamingText = uiState.streamingText,
         streamingReasoning = uiState.streamingReasoning,
@@ -220,6 +221,7 @@ private fun ChatScreenWired(
 @Composable
 private fun ChatContent(
     messages: List<ChatMessage>,
+    messagesLoading: Boolean = false,
     streaming: Boolean,
     streamingText: String,
     streamingReasoning: String = "",
@@ -434,7 +436,9 @@ private fun ChatContent(
                 onRefresh = onRefresh,
                 modifier = Modifier.fillMaxSize(),
             ) {
-                if (messages.isEmpty() && !streaming) {
+                if (messagesLoading && messages.isEmpty()) {
+                    SkeletonList(modifier = Modifier.fillMaxSize())
+                } else if (messages.isEmpty() && !streaming) {
                     EmptyBox(
                         icon = Icons.Filled.Forum,
                         title = stringResource(R.string.chat_empty_title),
