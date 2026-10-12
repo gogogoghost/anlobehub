@@ -124,7 +124,21 @@ private fun ChatScreenWired(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    val listState = rememberLazyListState()
+    // Recreated per topic AND per load-generation: empty->loaded flips the
+    // key, rebuilding state with the correct initial index so first frame
+    // already sits on the last user prompt (no top-flash + scroll jump).
+    // Streaming appends don't touch the key, preserving scroll position.
+    val loadedGen = if (uiState.messages.isEmpty()) 0 else 1
+    val landingIndex = remember(uiState.activeTopicId, loadedGen, uiState.messages) {
+        if (uiState.messages.isEmpty()) 0
+        else {
+            val turns = uiState.messages.toTurns()
+            turns.indexOfLast { it is ChatTurn.User }.coerceAtLeast(0)
+        }
+    }
+    val listState = androidx.compose.runtime.key(uiState.activeTopicId, loadedGen) {
+        rememberLazyListState(initialFirstVisibleItemIndex = landingIndex)
+    }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -143,6 +157,7 @@ private fun ChatScreenWired(
     // animate instead of jumping to avoid layout thrash at 12fps.
     LaunchedEffect(totalItems, uiState.streamingText, uiState.streamingReasoning, uiState.streaming) {
         if (totalItems <= 0) return@LaunchedEffect
+        if (!uiState.streaming) return@LaunchedEffect
         val info = listState.layoutInfo
         val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
         val nearBottom = lastVisible < 0 || totalItems - 1 - lastVisible <= 1

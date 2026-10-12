@@ -1,8 +1,13 @@
 package cc.jaxy.anlobehub.app
 
+import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -39,13 +44,38 @@ fun AnlobehubAppTheme(
     val theme by viewModel.theme.collectAsStateWithLifecycle()
     val dynamicColor by viewModel.dynamicColor.collectAsStateWithLifecycle()
     val systemDark = isSystemInDarkTheme()
+    val dark = when (theme) {
+        AppTheme.SYSTEM -> systemDark
+        AppTheme.LIGHT -> false
+        AppTheme.DARK -> true
+    }
+    // Keep status/navigation icon colors in sync with the app theme
+    // (default edge-to-edge follows the system theme, not ours).
+    val activity = LocalContext.current as? ComponentActivity
+    DisposableEffect(activity, dark) {
+        activity?.enableEdgeToEdge(
+            statusBarStyle = if (dark) {
+                SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+            } else {
+                SystemBarStyle.light(
+                    android.graphics.Color.TRANSPARENT,
+                    android.graphics.Color.TRANSPARENT,
+                )
+            },
+            navigationBarStyle = if (dark) {
+                SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+            } else {
+                SystemBarStyle.light(
+                    android.graphics.Color.TRANSPARENT,
+                    android.graphics.Color.TRANSPARENT,
+                )
+            },
+        )
+        onDispose {}
+    }
     AnlobehubTheme(
         dynamicColor = dynamicColor,
-        darkTheme = when (theme) {
-            AppTheme.SYSTEM -> systemDark
-            AppTheme.LIGHT -> false
-            AppTheme.DARK -> true
-        },
+        darkTheme = dark,
         content = content,
     )
 }

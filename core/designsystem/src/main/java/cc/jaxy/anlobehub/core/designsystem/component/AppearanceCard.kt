@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.AlertDialog
@@ -67,7 +67,7 @@ fun AppearanceCard(
     Card(modifier = modifier) {
         Column {
             SettingRow(
-                icon = Icons.Filled.Palette,
+                icon = Icons.Filled.BrightnessMedium,
                 title = stringResource(R.string.ds_theme_title),
                 subtitle = themeLabel(theme),
                 onClick = { showThemeDialog = true },

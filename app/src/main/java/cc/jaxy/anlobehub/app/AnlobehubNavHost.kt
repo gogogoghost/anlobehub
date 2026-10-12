@@ -54,6 +54,8 @@ data object ServerRoute
 @Serializable
 data class LoginRoute(val baseUrl: String)
 
+const val AGENTS_DIRTY_KEY = "agents_dirty_tick"
+
 @Serializable
 data object AgentsRoute
 
@@ -209,13 +211,14 @@ fun AnlobehubNavHost() {
         }
         composable<AgentsRoute> { entry ->
             val agentsViewModel: AgentsViewModel = hiltViewModel(entry)
-            // Refresh the list when returning from the editor.
-            val currentBackStack by navController.currentBackStackEntryFlow
-                .collectAsStateWithLifecycle(initialValue = null)
-            LaunchedEffect(currentBackStack) {
-                if (currentBackStack?.destination?.route
-                        ?.contains("AgentsRoute") == true
-                ) {
+            // Refresh only when the editor reports a mutation (create/edit/
+            // delete success); plain returns and first load don't refetch.
+            // Manual refresh stays on pull-to-refresh.
+            val dirtyTick by entry.savedStateHandle.getStateFlow(AGENTS_DIRTY_KEY, 0)
+                .collectAsStateWithLifecycle()
+            LaunchedEffect(dirtyTick) {
+                if (dirtyTick > 0) {
+                    entry.savedStateHandle[AGENTS_DIRTY_KEY] = 0
                     agentsViewModel.refresh()
                 }
             }
@@ -258,8 +261,16 @@ fun AnlobehubNavHost() {
                         ),
                     )
                 },
-                onCreated = {
+                onCreated = { id ->
+                    navController.previousBackStackEntry
+                        ?.savedStateHandle
+                        ?.set(AGENTS_DIRTY_KEY, System.currentTimeMillis().toInt())
                     navController.popBackStack()
+                },
+                onMutated = {
+                    navController.previousBackStackEntry
+                        ?.savedStateHandle
+                        ?.set(AGENTS_DIRTY_KEY, System.currentTimeMillis().toInt())
                 },
                 viewModel = editViewModel,
             )

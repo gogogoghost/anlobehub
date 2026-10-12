@@ -69,6 +69,7 @@ fun AgentEditScreen(
     onBack: () -> Unit,
     onOpenModelPicker: (current: AIModel?) -> Unit,
     onCreated: (String) -> Unit = {},
+    onMutated: () -> Unit = {},
     viewModel: AgentEditViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -91,10 +92,16 @@ fun AgentEditScreen(
     }
     val savedText = stringResource(R.string.agents_saved)
     LaunchedEffect(uiState.saved) {
-        if (uiState.saved) snackbar.showSnackbar(savedText)
+        if (uiState.saved) {
+            snackbar.showSnackbar(savedText)
+            onMutated()
+        }
     }
     LaunchedEffect(uiState.deleted) {
-        if (uiState.deleted) onBack()
+        if (uiState.deleted) {
+            onMutated()
+            onBack()
+        }
     }
     Scaffold(
         topBar = {
