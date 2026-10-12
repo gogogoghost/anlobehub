@@ -50,12 +50,11 @@ jobs:
         id: version
         run: |
           # Tag rule: "<versionName>", e.g. "0.0.6". versionCode is the
-          # commit count (monotonic, Play-compliant).
+          # workflow run number (monotonic, works with shallow clones).
           # Tolerate an optional leading "v" (v0.0.6 and 0.0.6 both work).
           NAME="${GITHUB_REF_NAME#v}"
-          CODE="$(git rev-list --count HEAD)"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
-          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
           echo "file=anlobehub-v${NAME}.apk" >> "$GITHUB_OUTPUT"
 
       - name: Assemble release APK
