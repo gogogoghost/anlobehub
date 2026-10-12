@@ -218,7 +218,6 @@ private fun AgentRow(
     val name = agent.displayName() ?: stringResource(R.string.agents_untitled)
     val subtitle = when {
         agent.isInbox -> stringResource(R.string.agents_inbox_subtitle)
-        !agent.description.isNullOrBlank() -> agent.description
         else -> null
     }
     Card(
