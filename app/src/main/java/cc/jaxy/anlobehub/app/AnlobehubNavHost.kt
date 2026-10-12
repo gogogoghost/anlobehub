@@ -200,6 +200,11 @@ fun AnlobehubNavHost() {
                         popUpTo(ServerRoute) { inclusive = true }
                     }
                 },
+                onChangeServer = {
+                    navController.navigate(ServerRoute) {
+                        popUpTo(LoginRoute::class) { inclusive = true }
+                    }
+                },
             )
         }
         composable<AgentsRoute> { entry ->
@@ -326,11 +331,6 @@ fun AnlobehubNavHost() {
                 }
             }
             LaunchedEffect(settingsViewModel) {
-                settingsViewModel.switchServerEvent.collect {
-                    navController.navigate(ServerRoute) {
-                        popUpTo(SettingsRoute) { inclusive = true }
-                    }
-                }
             }
             SettingsScreen(
                 onKnowledgeBasesClick = { navController.navigate(KnowledgeBasesRoute) },

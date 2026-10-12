@@ -18,6 +18,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -57,6 +58,7 @@ import cc.jaxy.anlobehub.core.designsystem.theme.spacing
 fun LoginScreen(
     baseUrl: String,
     onLoggedIn: () -> Unit,
+    onChangeServer: () -> Unit = {},
     viewModel: LoginViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -86,6 +88,7 @@ fun LoginScreen(
             viewModel.onPasswordChange(it)
         },
         onLogin = { viewModel.login(onLoggedIn) },
+        onChangeServer = onChangeServer,
     )
 }
 
@@ -99,6 +102,7 @@ private fun LoginContent(
     onEmailChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
     onLogin: () -> Unit,
+    onChangeServer: () -> Unit = {},
 ) {
     val view = LocalView.current
     val spacing = MaterialTheme.spacing
@@ -122,6 +126,7 @@ private fun LoginContent(
             Surface(
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.secondaryContainer,
+                onClick = onChangeServer,
             ) {
                 Row(
                     modifier = Modifier.padding(
@@ -131,8 +136,8 @@ private fun LoginContent(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = null,
+                        imageVector = Icons.Filled.Edit,
+                        contentDescription = stringResource(R.string.auth_change_server),
                         tint = MaterialTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier.size(spacing.l),
                     )

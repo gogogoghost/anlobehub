@@ -18,4 +18,6 @@
     <string name="auth_server_example">填写自部署地址，例如 https://your-lobehub.example.com</string>
     <string name="auth_server_save_failed">保存服务器地址失败，请重试</string>
     <string name="auth_appearance_title">外观</string>
+
+    <string name="auth_change_server">更换服务器</string>
 </resources>

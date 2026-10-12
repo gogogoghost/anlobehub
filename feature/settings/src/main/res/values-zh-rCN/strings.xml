@@ -3,9 +3,6 @@
     <string name="settings_signout_title">退出登录</string>
     <string name="settings_signout_text">确定要退出当前账号吗？退出后需要重新登录。</string>
     <string name="settings_signout_subtitle">退出当前账号</string>
-    <string name="switch_title">切换服务器</string>
-    <string name="switch_text">切换服务器将清空当前服务器地址，确定继续吗？</string>
-    <string name="switch_subtitle">更换服务器地址</string>
     <string name="section_account">账号</string>
     <string name="section_server">服务器</string>
     <string name="section_content">内容</string>

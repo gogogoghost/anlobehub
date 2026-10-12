@@ -102,7 +102,6 @@ private fun SettingsContent(
     val screenContext = androidx.compose.ui.platform.LocalContext.current
     val language by viewModel.language.collectAsStateWithLifecycle()
     var showSignOutDialog by rememberSaveable { mutableStateOf(false) }
-    var showSwitchDialog by rememberSaveable { mutableStateOf(false) }
     val snackbar = androidx.compose.material3.SnackbarHostState()
     val errorText = uiState.error?.resolve()
     androidx.compose.runtime.LaunchedEffect(errorText) {
@@ -136,7 +135,6 @@ private fun SettingsContent(
                     onKnowledgeBasesClick = onKnowledgeBasesClick,
                     onProvidersClick = onProvidersClick,
                     onSignOutClick = { showSignOutDialog = true },
-                    onSwitchServerClick = { showSwitchDialog = true },
                     theme = theme,
                     language = language,
                     onThemeChange = { viewModel.setTheme(it) },
@@ -173,23 +171,6 @@ private fun SettingsContent(
             },
         )
     }
-    if (showSwitchDialog) {
-        AlertDialog(
-            onDismissRequest = { showSwitchDialog = false },
-            title = { Text(stringResource(R.string.switch_title)) },
-            text = { Text(stringResource(R.string.switch_text)) },
-            confirmButton = {
-                TextButton(onClick = { showSwitchDialog = false; viewModel.switchServer() }) {
-                    Text(stringResource(DsR.string.common_confirm))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSwitchDialog = false }) {
-                    Text(stringResource(DsR.string.common_cancel))
-                }
-            },
-        )
-    }
 }
 
 @Composable
@@ -201,7 +182,6 @@ private fun SettingsBody(
     onKnowledgeBasesClick: () -> Unit,
     onProvidersClick: () -> Unit,
     onSignOutClick: () -> Unit,
-    onSwitchServerClick: () -> Unit,
     theme: AppTheme,
     language: AppLanguage,
     onThemeChange: (AppTheme) -> Unit,
@@ -298,13 +278,7 @@ private fun SettingsBody(
                         subtitle = stringResource(R.string.settings_signout_subtitle),
                         onClick = onSignOutClick,
                     )
-                    HorizontalDivider()
-                    SettingRow(
-                        icon = Icons.Filled.SwapHoriz,
-                        title = stringResource(R.string.switch_title),
-                        subtitle = stringResource(R.string.switch_subtitle),
-                        onClick = onSwitchServerClick,
-                    )
+
                 }
             }
         }
@@ -480,7 +454,6 @@ private fun SettingsBodyLightPreview() {
             onKnowledgeBasesClick = {},
             onProvidersClick = {},
             onSignOutClick = {},
-            onSwitchServerClick = {},
         )
     }
 }
@@ -501,7 +474,6 @@ private fun SettingsBodyDarkPreview() {
             onKnowledgeBasesClick = {},
             onProvidersClick = {},
             onSignOutClick = {},
-            onSwitchServerClick = {},
         )
     }
 }

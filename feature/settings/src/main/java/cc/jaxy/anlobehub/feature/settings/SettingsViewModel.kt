@@ -58,9 +58,6 @@ class SettingsViewModel @Inject constructor(
     private val _signedOutEvent = MutableSharedFlow<Unit>()
     val signedOutEvent: SharedFlow<Unit> = _signedOutEvent.asSharedFlow()
 
-    private val _switchServerEvent = MutableSharedFlow<Unit>()
-    val switchServerEvent: SharedFlow<Unit> = _switchServerEvent.asSharedFlow()
-
     init {
         // Show instantly from caches (profile cache wins: it carries the
         // avatar URL, so Coil hits memory and the avatar shows in 0 frames).
@@ -145,7 +142,6 @@ class SettingsViewModel @Inject constructor(
             _signedOutEvent.emit(Unit)
         }
     }
-    /** 切换服务器：清空 [ServerStore] 后由父通过 [switchServerEvent] 导航。 */
     /** Uploads a prepared avatar image, then points the profile at it. */
     fun uploadAvatar(bytes: ByteArray, mime: String) {
         if (_uiState.value.uploadingAvatar) return
@@ -198,14 +194,6 @@ class SettingsViewModel @Inject constructor(
 
     fun dismissError() {
         _uiState.value = _uiState.value.copy(error = null)
-    }
-
-    fun switchServer() {
-        viewModelScope.launch {
-            serverStore.clear()
-            userRepository.clearCache()
-            _switchServerEvent.emit(Unit)
-        }
     }
 
     val language: StateFlow<AppLanguage> = uiPreferencesStore.language
