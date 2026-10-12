@@ -123,7 +123,13 @@ private fun MdRichText(
                     background = if (run.code) codeBg.copy(alpha = 0.6f) else androidx.compose.ui.graphics.Color.Unspecified,
                 )
                 if (run.link != null) {
-                    withLink(LinkAnnotation.Url(run.link)) { withStyle(span) { append(run.text) } }
+                    // Explicit styles: LinkAnnotation.Url defaults to underlined.
+                    val linkStyles = androidx.compose.ui.text.TextLinkStyles(
+                        style = span.copy(textDecoration = null),
+                    )
+                    withLink(LinkAnnotation.Url(run.link, styles = linkStyles)) {
+                        withStyle(span) { append(run.text) }
+                    }
                 } else {
                     withStyle(span) { append(run.text) }
                 }

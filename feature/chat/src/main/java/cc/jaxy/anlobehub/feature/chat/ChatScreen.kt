@@ -210,6 +210,7 @@ private fun ChatScreenWired(
         models = uiState.models,
         activeModel = uiState.activeModel,
         modelsLoading = uiState.modelsLoading,
+        agentAvatar = uiState.agentAvatar,
         reasoningConfig = uiState.reasoningConfig,
         reasoningLoading = uiState.reasoningLoading,
         reasoningSaving = uiState.reasoningSaving,
@@ -248,6 +249,7 @@ private fun ChatContent(
     models: List<AIModel>,
     activeModel: AIModel?,
     modelsLoading: Boolean = false,
+    agentAvatar: String? = null,
     reasoningConfig: cc.jaxy.anlobehub.core.data.chat.ReasoningConfig? = null,
     reasoningLoading: Boolean = false,
     reasoningSaving: Boolean = false,
@@ -490,6 +492,7 @@ private fun ChatContent(
                                         AssistantMessageRow(
                                             message = answer,
                                             agentName = title,
+                                            agentAvatar = agentAvatar,
                                         )
                                     }
                                 }
@@ -503,6 +506,7 @@ private fun ChatContent(
                                     streamingText = streamingText,
                                     streamingReasoning = streamingReasoning,
                                     streamingReasoningSecs = streamingReasoningSecs,
+                                    agentAvatar = agentAvatar,
                                 )
                             }
                         }

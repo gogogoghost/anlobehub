@@ -72,6 +72,7 @@ class ChatViewModel @Inject constructor(
         val models: List<AIModel> = emptyList(),
         val activeModel: AIModel? = null,
         val modelsLoading: Boolean = false,
+        val agentAvatar: String? = null,
         val pendingFiles: List<UploadedFile> = emptyList(),
         val uploading: Boolean = false,
         val reasoningConfig: ReasoningConfig? = null,
@@ -153,6 +154,7 @@ class ChatViewModel @Inject constructor(
                 models = models,
                 activeModel = activeModel,
                 modelsLoading = false,
+                agentAvatar = bound?.avatar?.takeIf { it.isNotBlank() },
             )
             loadMessages()
         }
