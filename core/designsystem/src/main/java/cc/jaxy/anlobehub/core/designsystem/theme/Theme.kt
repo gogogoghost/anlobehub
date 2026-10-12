@@ -168,12 +168,13 @@ private val AnTypography =
 /**
  * 应用级主题入口。
  * @param darkTheme 是否深色，默认跟随系统
- * @param dynamicColor 是否在 Android 12+ 启用动态取色，默认开启
+ * @param dynamicColor 是否在 Android 12+ 启用动态取色，默认关闭
+ * （品牌极光紫优先于系统壁纸取色）。
  */
 @Composable
 fun AnlobehubTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     // Android 12+ 动态取色优先，低版本/关闭时回落到 Lobe 自定义配色
