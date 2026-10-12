@@ -67,13 +67,16 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
             val cached = runCatching { authRepository.authState.first() }.getOrNull()
+            // Persisted avatar wins over the session image (the session is
+            // minted at login and goes stale after avatar changes).
+            val persistedAvatar = userRepository.persistedAvatar()
             val cachedProfile = userRepository.cachedProfile()
                 ?: (cached as? AuthState.SignedIn)?.let {
                     UserProfile(
                         userId = it.userId,
                         email = it.email,
                         fullName = it.name,
-                        avatar = it.avatar,
+                        avatar = persistedAvatar ?: it.avatar,
                     )
                 }
             _uiState.value = _uiState.value.copy(
