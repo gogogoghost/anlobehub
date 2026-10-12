@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -169,7 +170,7 @@ private fun ReasoningSection(
     Column(verticalArrangement = Arrangement.spacedBy(spacing.s)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(spacing.s)) {
             Text(stringResource(R.string.models_detail_reasoning_title), style = MaterialTheme.typography.titleSmall)
-            if (loading || saving) CircularProgressIndicator(modifier = Modifier.height(16.dp), strokeWidth = 2.dp)
+            if (loading || saving) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
             if (saving) Text(stringResource(R.string.models_detail_saving), style = MaterialTheme.typography.bodySmall)
         }
         ReasoningChoiceRow(
