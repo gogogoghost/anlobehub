@@ -41,4 +41,5 @@
     <string name="chat_topic_delete_title">Delete this conversation?</string>
 
     <string name="chat_link_open">Open link</string>
+    <string name="chat_scroll_to_bottom">Scroll to bottom</string>
 </resources>

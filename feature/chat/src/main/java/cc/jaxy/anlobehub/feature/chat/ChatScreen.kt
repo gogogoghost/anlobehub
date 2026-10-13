@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.AlertDialog
@@ -68,6 +69,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -102,6 +104,19 @@ import kotlinx.coroutines.withContext
 private const val MAX_ATTACH_BYTES = 10 * 1024 * 1024
 
 @Composable
+private fun ScrollToBottomButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    SmallFloatingActionButton(
+        onClick = onClick,
+        modifier = modifier.padding(MaterialTheme.spacing.l),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.KeyboardArrowDown,
+            contentDescription = stringResource(R.string.chat_scroll_to_bottom),
+        )
+    }
+}
+
+@Composable
 fun ChatScreen(
     onOpenModelPicker: (current: AIModel?) -> Unit = {},
     onOpenHistory: (agentId: String, activeTopicId: String?) -> Unit = { _, _ -> },
@@ -125,22 +140,21 @@ private fun ChatScreenWired(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     // Recreated per topic AND per load-generation: empty->loaded flips the
-    // key, rebuilding state with the correct initial index so first frame
-    // already sits on the last user prompt (no top-flash + scroll jump).
-    // Streaming appends don't touch the key, preserving scroll position.
+    // key, rebuilding state with the newest turn as the landing index so the
+    // first frame already sits at the tail (no mid-history flash, no jump to
+    // the last prompt). Streaming appends don't touch the key, preserving
+    // scroll position.
     val loadedGen = if (uiState.messages.isEmpty()) 0 else 1
-    val landingIndex = remember(uiState.activeTopicId, loadedGen, uiState.messages) {
-        if (uiState.messages.isEmpty()) 0
-        else {
-            val turns = uiState.messages.toTurns()
-            turns.indexOfLast { it is ChatTurn.User }.coerceAtLeast(0)
-        }
+    val landingIndex = remember(uiState.activeTopicId, loadedGen) {
+        if (uiState.messages.isEmpty()) 0 else uiState.messages.toTurns().lastIndex
     }
     val listState = androidx.compose.runtime.key(uiState.activeTopicId, loadedGen) {
         rememberLazyListState(initialFirstVisibleItemIndex = landingIndex)
     }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // History opens at the tail, so every session starts pinned.
+    val tail = rememberTailFollow(listState)
 
     val error = uiState.error
     val errorText = error?.resolve()
@@ -151,19 +165,23 @@ private fun ChatScreenWired(
         }
     }
 
-    val totalItems = uiState.messages.size + if (uiState.streaming) 1 else 0
-    // Follow the tail while streaming, but never yank: only auto-scroll
-    // when already near the bottom (user scrolled up = hands off), and
-    // animate instead of jumping to avoid layout thrash at 12fps.
-    LaunchedEffect(totalItems, uiState.streamingText, uiState.streamingReasoning, uiState.streaming) {
-        if (totalItems <= 0) return@LaunchedEffect
-        if (!uiState.streaming) return@LaunchedEffect
-        val info = listState.layoutInfo
-        val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
-        val nearBottom = lastVisible < 0 || totalItems - 1 - lastVisible <= 1
-        if (nearBottom) {
-            runCatching { listState.animateScrollToItem(totalItems - 1) }
-        }
+    // Item count is the LazyColumn's real content count (folding turns), not
+    // messages.size — scroll targets index the visible list.
+    val turnsCount = remember(uiState.messages) { uiState.messages.toTurns().size }
+    val totalItems = turnsCount + if (uiState.streaming) 1 else 0
+    // Follow the tail while pinned: token ticks, the send landing, and the
+    // streaming->settled transition all funnel through here. Instant snap per
+    // tick: restarting an animation at ~12fps never settles, and its
+    // mid-flight offsets are wrong to branch on.
+    LaunchedEffect(
+        totalItems,
+        uiState.streamingText,
+        uiState.streamingReasoning,
+        uiState.streaming,
+    ) {
+        if (totalItems <= 0 || !tail.pinned) return@LaunchedEffect
+        if (listState.isScrollInProgress) return@LaunchedEffect // gesture in flight
+        tail.follow(animate = false)
     }
 
     val attachReadFailed = stringResource(R.string.chat_attach_read_failed)
@@ -222,7 +240,20 @@ private fun ChatScreenWired(
         snackbar = snackbar,
         onNewConversation = viewModel::newConversation,
         onOpenModelPicker = { onOpenModelPicker(uiState.activeModel) },
-        onSend = { text, fileIds -> viewModel.send(text, fileIds) },
+        onSend = { text, fileIds ->
+            // Sending re-pins to the tail even from deep history: ChatGPT/
+            // Gemini never leave your own fresh message off-screen.
+            tail.pin()
+            viewModel.send(text, fileIds)
+        },
+        onInputFocused = { tail.pin() },
+        atBottom = tail.pinned,
+        onScrollToBottom = {
+            scope.launch {
+                tail.pin()
+                tail.follow(animate = true)
+            }
+        },
         onStop = viewModel::stop,
         onAttachClick = { pickImage.launch("image/*") },
         onRemoveFile = viewModel::removePendingFile,
@@ -259,11 +290,14 @@ private fun ChatContent(
     uploading: Boolean,
     title: String? = null,
     listState: androidx.compose.foundation.lazy.LazyListState = rememberLazyListState(),
+    atBottom: Boolean = true,
+    onScrollToBottom: () -> Unit = {},
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
     onOpenHistory: () -> Unit = {},
     onNewConversation: () -> Unit = {},
     onOpenModelPicker: () -> Unit = {},
     onSend: (String, List<String>) -> Unit = { _, _ -> },
+    onInputFocused: () -> Unit = {},
     onStop: () -> Unit = {},
     onAttachClick: () -> Unit = {},
     onRemoveFile: (UploadedFile) -> Unit = {},
@@ -419,7 +453,9 @@ private fun ChatContent(
                         OutlinedTextField(
                             value = input,
                             onValueChange = { input = it },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .onFocusChanged { if (it.isFocused) onInputFocused() },
                             placeholder = { Text(stringResource(R.string.chat_input_hint)) },
                             shape = RoundedCornerShape(24.dp),
                             maxLines = 6,
@@ -447,7 +483,7 @@ private fun ChatContent(
             }
         },
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             RefreshBox(
                 refreshing = false,
                 onRefresh = onRefresh,
@@ -512,6 +548,12 @@ private fun ChatContent(
                         }
                     }
                 }
+            }
+            if (!atBottom) {
+                ScrollToBottomButton(
+                    onClick = onScrollToBottom,
+                    modifier = Modifier.align(Alignment.BottomEnd),
+                )
             }
         }
     }
