@@ -19,15 +19,13 @@ android {
 
 dependencies {
     api(project(":core:common"))
-    api(project(":core:network"))
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
-    implementation(libs.room.paging)
     ksp(libs.room.compiler)
-    implementation(libs.paging.runtime)
     implementation(libs.datastore.preferences)
     implementation(libs.coroutines.core)
     implementation(libs.serialization.json)
+    implementation(libs.okhttp)
     implementation(libs.hilt.android)
     testImplementation(libs.junit)
     ksp(libs.hilt.compiler)

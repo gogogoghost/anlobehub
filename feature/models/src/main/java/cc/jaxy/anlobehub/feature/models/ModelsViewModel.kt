@@ -7,7 +7,6 @@ import cc.jaxy.anlobehub.core.common.result.AnResult
 import cc.jaxy.anlobehub.core.data.chat.AIModel
 import cc.jaxy.anlobehub.core.data.chat.ModelRepository
 import cc.jaxy.anlobehub.core.data.chat.ReasoningConfig
-import cc.jaxy.anlobehub.core.data.session.ServerStore
 import cc.jaxy.anlobehub.core.designsystem.text.UiText
 import cc.jaxy.anlobehub.core.designsystem.text.toUiText
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -15,13 +14,11 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @HiltViewModel
 class ModelsViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    private val serverStore: ServerStore,
     private val modelRepository: ModelRepository,
 ) : ViewModel() {
 
@@ -45,19 +42,7 @@ class ModelsViewModel @Inject constructor(
     fun refresh() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(loading = true, error = null)
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
-            if (baseUrl.isNullOrBlank()) {
-                _uiState.value = _uiState.value.copy(
-                    loading = false,
-                    error = UiText.Res(R.string.models_no_server),
-                )
-                return@launch
-            }
-            // Provider-scoped (e.g. check model): full model list of that
-            // provider, including disabled ones. Otherwise the enabled-only
-            // global list.
-            val scoped = filterProviderId
-            when (val result = if (scoped != null) modelRepository.listProviderModels(baseUrl, scoped) else modelRepository.listModels(baseUrl)) {
+            when (val result = if (filterProviderId != null) modelRepository.listProviderModels(filterProviderId) else modelRepository.listModels()) {
                 is AnResult.Ok -> _uiState.value = _uiState.value.copy(
                     loading = false,
                     models = result.value,
@@ -89,12 +74,7 @@ class ModelsViewModel @Inject constructor(
         if (_reasoning.value.containsKey(key) || _reasoningUi.value[key]?.loading == true) return
         viewModelScope.launch {
             _reasoningUi.value = _reasoningUi.value + (key to ReasoningUiState(loading = true))
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
-            if (baseUrl.isNullOrBlank()) {
-                _reasoningUi.value = _reasoningUi.value + (key to ReasoningUiState(error = UiText.Res(R.string.models_no_server)))
-                return@launch
-            }
-            when (val result = modelRepository.getReasoningConfig(baseUrl, model.id, model.providerId.orEmpty())) {
+            when (val result = modelRepository.getReasoningConfig(model.id, model.providerId.orEmpty())) {
                 is AnResult.Ok -> {
                     _reasoning.value = _reasoning.value + (key to result.value)
                     _reasoningUi.value = _reasoningUi.value + (key to ReasoningUiState())
@@ -113,14 +93,9 @@ class ModelsViewModel @Inject constructor(
         viewModelScope.launch {
             val current = _reasoning.value[cacheKey] ?: ReasoningConfig()
             _reasoningUi.value = _reasoningUi.value + (cacheKey to ReasoningUiState(saving = true))
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
-            if (baseUrl.isNullOrBlank()) {
-                _reasoningUi.value = _reasoningUi.value + (cacheKey to ReasoningUiState(error = UiText.Res(R.string.models_no_server)))
-                return@launch
-            }
             val merged = current.raw.toMutableMap()
             if (value.isNullOrBlank()) merged.remove(key) else merged[key] = value
-            when (val result = modelRepository.updateReasoningConfig(baseUrl, model.id, model.providerId.orEmpty(), merged)) {
+            when (val result = modelRepository.updateReasoningConfig(model.id, model.providerId.orEmpty(), merged)) {
                 is AnResult.Ok -> {
                     _reasoning.value = _reasoning.value + (
                         cacheKey to current.copy(
@@ -151,7 +126,7 @@ class ModelsViewModel @Inject constructor(
 /** Cache key for per-model reasoning config: provider + model id. */
 fun reasoningKeyOf(model: AIModel): String = model.providerId.orEmpty() + "\n" + model.id
 
-/** Reasoning value keys written back to the server (merged with [ReasoningConfig.raw]). */
+/** Reasoning value keys merged with [ReasoningConfig.raw]. */
 object ReasoningKeys {
     const val EFFORT = "effort"
     const val REASONING_EFFORT = "reasoningEffort"

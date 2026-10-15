@@ -2,200 +2,20 @@ package cc.jaxy.anlobehub.feature.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import cc.jaxy.anlobehub.core.common.result.AnResult
 import cc.jaxy.anlobehub.core.common.preferences.AppLanguage
 import cc.jaxy.anlobehub.core.common.preferences.AppTheme
 import cc.jaxy.anlobehub.core.data.preferences.UiPreferencesStore
-import cc.jaxy.anlobehub.core.data.session.AuthRepository
-import cc.jaxy.anlobehub.core.data.session.AuthState
-import cc.jaxy.anlobehub.core.data.files.FileRepository
-import cc.jaxy.anlobehub.core.data.session.ServerStore
-import cc.jaxy.anlobehub.core.data.user.UserProfile
-import cc.jaxy.anlobehub.core.data.user.UserRepository
-import cc.jaxy.anlobehub.core.designsystem.text.UiText
-import cc.jaxy.anlobehub.core.designsystem.text.toUiText
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val serverStore: ServerStore,
-    private val authRepository: AuthRepository,
-    private val userRepository: UserRepository,
-    private val fileRepository: FileRepository,
     private val uiPreferencesStore: UiPreferencesStore,
 ) : ViewModel() {
-
-    data class UiState(
-        val baseUrl: String? = null,
-        val profile: UserProfile? = null,
-        val loading: Boolean = false,
-        val uploadingAvatar: Boolean = false,
-        val error: UiText? = null,
-    )
-
-    // Seed synchronously: persisted avatar URL paints the snapshot on the
-    // very first frame; memory cache (when warm) fills the rest.
-    private val _uiState = MutableStateFlow(
-        UiState(
-            profile = userRepository.cachedProfile()
-                ?: userRepository.persistedAvatar()?.let { UserProfile(avatar = it) },
-            loading = true,
-        ),
-    )
-    val uiState: StateFlow<UiState> = _uiState.asStateFlow()
-
-    private val _signedOutEvent = MutableSharedFlow<Unit>()
-    val signedOutEvent: SharedFlow<Unit> = _signedOutEvent.asSharedFlow()
-
-    init {
-        // Show instantly from caches (profile cache wins: it carries the
-        // avatar URL, so Coil hits memory and the avatar shows in 0 frames).
-        viewModelScope.launch {
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
-            val cached = runCatching { authRepository.authState.first() }.getOrNull()
-            // Persisted avatar wins over the session image (the session is
-            // minted at login and goes stale after avatar changes).
-            val persistedAvatar = userRepository.persistedAvatar()
-            val cachedProfile = userRepository.cachedProfile()
-                ?: (cached as? AuthState.SignedIn)?.let {
-                    UserProfile(
-                        userId = it.userId,
-                        email = it.email,
-                        fullName = it.name,
-                        avatar = persistedAvatar ?: it.avatar,
-                    )
-                }
-            _uiState.value = _uiState.value.copy(
-                baseUrl = baseUrl,
-                profile = cachedProfile,
-                loading = false,
-                error = if (baseUrl.isNullOrBlank()) UiText.Res(R.string.no_server) else null,
-            )
-            if (!baseUrl.isNullOrBlank()) refreshProfile(baseUrl, silent = true)
-        }
-    }
-
-    fun load() {
-        viewModelScope.launch {
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
-            if (baseUrl.isNullOrBlank()) {
-                _uiState.value = _uiState.value.copy(
-                    baseUrl = null,
-                    loading = false,
-                    error = UiText.Res(R.string.no_server),
-                )
-                return@launch
-            }
-            // Keep showing cached content; only show spinner when nothing to show.
-            if (_uiState.value.profile == null) {
-                _uiState.value = _uiState.value.copy(baseUrl = baseUrl, loading = true, error = null)
-            } else {
-                _uiState.value = _uiState.value.copy(baseUrl = baseUrl, error = null)
-            }
-            refreshProfile(baseUrl, silent = false)
-        }
-    }
-
-    private suspend fun refreshProfile(baseUrl: String, silent: Boolean) {
-        when (val result = userRepository.getUserState(baseUrl)) {
-            is AnResult.Ok -> _uiState.value = _uiState.value.copy(
-                baseUrl = baseUrl,
-                profile = result.value,
-                loading = false,
-                error = null,
-            )
-            is AnResult.Err -> {
-                // Silent refresh failure must not wipe cached content.
-                if (silent && _uiState.value.profile != null) {
-                    _uiState.value = _uiState.value.copy(baseUrl = baseUrl, loading = false)
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        baseUrl = baseUrl,
-                        loading = false,
-                        error = result.error.toUiText(),
-                    )
-                }
-            }
-        }
-    }
-
-    /**
-     * 退出登录。保留 [ServerStore] 中的服务器地址便于重登，
-     * 导航由父通过 [signedOutEvent] 接管。
-     */
-    fun signOut() {
-        viewModelScope.launch {
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull().orEmpty()
-            authRepository.signOut(baseUrl)
-            userRepository.clearCache()
-            _signedOutEvent.emit(Unit)
-        }
-    }
-    /** Uploads a prepared avatar image, then points the profile at it. */
-    fun uploadAvatar(bytes: ByteArray, mime: String) {
-        if (_uiState.value.uploadingAvatar) return
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(uploadingAvatar = true, error = null)
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
-            if (baseUrl.isNullOrBlank()) {
-                _uiState.value = _uiState.value.copy(
-                    uploadingAvatar = false,
-                    error = UiText.Res(R.string.no_server),
-                )
-                return@launch
-            }
-            val url = when (
-                val uploaded = fileRepository.uploadFile(
-                    baseUrl = baseUrl,
-                    name = "avatar.webp",
-                    mime = mime,
-                    bytes = bytes,
-                )
-            ) {
-                is AnResult.Ok -> uploaded.value.url?.takeIf { it.isNotBlank() }
-                is AnResult.Err -> {
-                    _uiState.value = _uiState.value.copy(
-                        uploadingAvatar = false,
-                        error = uploaded.error.toUiText(),
-                    )
-                    return@launch
-                }
-            }
-            if (url == null) {
-                _uiState.value = _uiState.value.copy(
-                    uploadingAvatar = false,
-                    error = UiText.Res(R.string.avatar_upload_failed),
-                )
-                return@launch
-            }
-            when (val updated = userRepository.updateAvatar(baseUrl, url)) {
-                is AnResult.Ok -> _uiState.value = _uiState.value.copy(
-                    uploadingAvatar = false,
-                    profile = _uiState.value.profile?.copy(avatar = url),
-                )
-                is AnResult.Err -> _uiState.value = _uiState.value.copy(
-                    uploadingAvatar = false,
-                    error = updated.error.toUiText(),
-                )
-            }
-        }
-    }
-
-    fun dismissError() {
-        _uiState.value = _uiState.value.copy(error = null)
-    }
-
     val language: StateFlow<AppLanguage> = uiPreferencesStore.language
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppLanguage.SYSTEM)
 

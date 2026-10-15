@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -26,6 +27,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -74,6 +76,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -153,7 +156,7 @@ private fun ChatScreenWired(
     }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    // History opens at the tail, so every session starts pinned.
+    // History opens at the tail, so every conversation starts pinned.
     val tail = rememberTailFollow(listState)
 
     val error = uiState.error
@@ -221,7 +224,6 @@ private fun ChatScreenWired(
         streamingText = uiState.streamingText,
         streamingReasoning = uiState.streamingReasoning,
         streamingReasoningSecs = uiState.streamingReasoningSecs,
-        streamingSteps = uiState.streamingSteps,
         topics = uiState.topics,
         topicsLoading = uiState.topicsLoading,
         activeTopicId = uiState.activeTopicId,
@@ -229,6 +231,8 @@ private fun ChatScreenWired(
         activeModel = uiState.activeModel,
         modelsLoading = uiState.modelsLoading,
         agentAvatar = uiState.agentAvatar,
+        openingMessage = uiState.openingMessage,
+        openingQuestions = uiState.openingQuestions,
         reasoningConfig = uiState.reasoningConfig,
         reasoningLoading = uiState.reasoningLoading,
         reasoningSaving = uiState.reasoningSaving,
@@ -273,7 +277,6 @@ private fun ChatContent(
     streamingText: String,
     streamingReasoning: String = "",
     streamingReasoningSecs: Double? = null,
-    streamingSteps: List<ChatViewModel.StreamSegment> = emptyList(),
     topics: List<ChatTopic>,
     topicsLoading: Boolean = false,
     activeTopicId: String?,
@@ -281,6 +284,8 @@ private fun ChatContent(
     activeModel: AIModel?,
     modelsLoading: Boolean = false,
     agentAvatar: String? = null,
+    openingMessage: String? = null,
+    openingQuestions: List<String> = emptyList(),
     reasoningConfig: cc.jaxy.anlobehub.core.data.chat.ReasoningConfig? = null,
     reasoningLoading: Boolean = false,
     reasoningSaving: Boolean = false,
@@ -492,11 +497,49 @@ private fun ChatContent(
                 if (messagesLoading && messages.isEmpty()) {
                     SkeletonList(modifier = Modifier.fillMaxSize())
                 } else if (messages.isEmpty() && !streaming) {
-                    EmptyBox(
-                        icon = Icons.Filled.Forum,
-                        title = stringResource(R.string.chat_empty_title),
-                        description = stringResource(R.string.chat_empty_desc),
-                    )
+                    if (activeTopicId == null && (openingMessage?.isNotBlank() == true || openingQuestions.isNotEmpty())) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(MaterialTheme.spacing.xl),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Forum,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(40.dp),
+                            )
+                            Text(
+                                text = stringResource(R.string.chat_empty_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.padding(top = MaterialTheme.spacing.m),
+                            )
+                            Text(
+                                text = openingMessage?.takeIf(String::isNotBlank)
+                                    ?: stringResource(R.string.chat_empty_desc),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(top = MaterialTheme.spacing.s),
+                            )
+                            openingQuestions.forEach { question ->
+                                AssistChip(
+                                    onClick = { input = question },
+                                    label = { Text(question) },
+                                    modifier = Modifier.padding(top = MaterialTheme.spacing.s),
+                                )
+                            }
+                        }
+                    } else {
+                        EmptyBox(
+                            icon = Icons.Filled.Forum,
+                            title = stringResource(R.string.chat_empty_title),
+                            description = stringResource(R.string.chat_empty_desc),
+                        )
+                    }
                 } else {
                     val turns = remember(messages) { messages.toTurns() }
                     LazyColumn(
@@ -512,8 +555,7 @@ private fun ChatContent(
                                 when (it) {
                                     is ChatTurn.User -> it.message.id.ifBlank { it.hashCode().toString() }
                                     is ChatTurn.AssistantGroup ->
-                                        (it.answer?.id ?: it.steps.firstOrNull()?.id).orEmpty()
-                                            .ifBlank { it.hashCode().toString() }
+                                        it.answer?.id.orEmpty().ifBlank { it.hashCode().toString() }
                                 }
                             },
                             contentType = { if (it is ChatTurn.User) "user" else "group" },
@@ -521,9 +563,6 @@ private fun ChatContent(
                             when (turn) {
                                 is ChatTurn.User -> MessageRow(message = turn.message)
                                 is ChatTurn.AssistantGroup -> {
-                                    if (turn.steps.isNotEmpty()) {
-                                        StepsRow(steps = turn.steps)
-                                    }
                                     turn.answer?.let { answer ->
                                         AssistantMessageRow(
                                             message = answer,
@@ -537,7 +576,6 @@ private fun ChatContent(
                         if (streaming) {
                             item(key = "streaming", contentType = "streaming") {
                                 StreamingTurn(
-                                    steps = streamingSteps,
                                     agentName = title,
                                     streamingText = streamingText,
                                     streamingReasoning = streamingReasoning,

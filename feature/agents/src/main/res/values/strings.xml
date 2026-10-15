@@ -11,10 +11,6 @@
     <string name="agents_no_match_title">No matching agents</string>
     <string name="agents_no_match_desc">Try a different keyword</string>
     <string name="agents_untitled">Untitled agent</string>
-    <string name="agents_inbox_badge">Lobe AI</string>
-    <string name="agents_inbox_subtitle">Default assistant</string>
-    <string name="agents_inbox_delete_error">The default assistant cannot be deleted</string>
-    <string name="agents_no_server">No server configured. Set the server address in Settings first.</string>
     <string name="agents_create_title">New agent</string>
     <string name="agents_create_title_label">Name</string>
     <string name="agents_create_title_required">Please enter a name</string>
@@ -55,7 +51,7 @@
     <string name="agents_avatar_custom_url">Use image URL instead</string>
     <string name="agents_avatar_use_url">Use this URL</string>
 
-    <string name="agents_avatar_upload">Upload image</string>
-    <string name="agents_avatar_uploading">Uploading…</string>
-    <string name="agents_avatar_upload_failed">Upload failed</string>
+    <string name="agents_avatar_upload">Choose image</string>
+    <string name="agents_avatar_uploading">Saving locally…</string>
+    <string name="agents_avatar_upload_failed">Unable to save image locally</string>
 </resources>

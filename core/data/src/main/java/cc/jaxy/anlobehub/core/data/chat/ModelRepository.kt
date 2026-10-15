@@ -1,133 +1,85 @@
 package cc.jaxy.anlobehub.core.data.chat
 
+import cc.jaxy.anlobehub.core.common.result.AnError
 import cc.jaxy.anlobehub.core.common.result.AnResult
-import cc.jaxy.anlobehub.core.network.trpc.TrpcClient
+import cc.jaxy.anlobehub.core.data.local.CatalogSeeder
+import cc.jaxy.anlobehub.core.data.local.LocalDao
+import cc.jaxy.anlobehub.core.data.local.ModelRow
+import cc.jaxy.anlobehub.core.data.local.ReasoningRow
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.put
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 
-/**
- * Per-model reasoning config (personal preference, ungated procedures).
- *
- * The server schema carries ~25 vendor-specific effort keys; clients only
- * need the generic ones plus passthrough. Unknown keys are preserved on
- * read and sent back untouched on write.
- */
-data class ReasoningConfig(
-    /** Generic effort: low/medium/high/max (OpenAI-style `effort`). */
-    val effort: String? = null,
-    /** Generic effort: low/medium/high (`reasoningEffort`). */
-    val reasoningEffort: String? = null,
-    /** Gemini thinking level: minimal/low/medium/high. */
-    val thinkingLevel: String? = null,
-    /** Raw server object for vendor-specific keys. */
-    val raw: Map<String, String> = emptyMap(),
-)
-
+@kotlinx.serialization.Serializable
+data class ReasoningConfig(val effort: String? = null, val reasoningEffort: String? = null, val thinkingLevel: String? = null, val raw: Map<String, String> = emptyMap())
 interface ModelRepository {
-    suspend fun listModels(baseUrl: String): AnResult<List<AIModel>>
-
-    suspend fun listProviderModels(
-        baseUrl: String,
-        providerId: String,
-    ): AnResult<List<AIModel>>
-
-    suspend fun toggleModel(
-        baseUrl: String,
-        modelId: String,
-        providerId: String,
-        enabled: Boolean,
-    ): AnResult<Unit>
-
-    suspend fun getReasoningConfig(
-        baseUrl: String,
-        modelId: String,
-        providerId: String,
-    ): AnResult<ReasoningConfig>
-
-    suspend fun updateReasoningConfig(
-        baseUrl: String,
-        modelId: String,
-        providerId: String,
-        value: Map<String, String>,
-    ): AnResult<Unit>
+    suspend fun listModels(): AnResult<List<AIModel>>
+    suspend fun listProviderModels(providerId: String): AnResult<List<AIModel>>
+    suspend fun toggleModel(modelId: String, providerId: String, enabled: Boolean): AnResult<Unit>
+    suspend fun getReasoningConfig(modelId: String, providerId: String): AnResult<ReasoningConfig>
+    suspend fun updateReasoningConfig(modelId: String, providerId: String, value: Map<String, String>): AnResult<Unit>
 }
 
 @Singleton
-class ModelRepositoryImpl @Inject constructor(
-    private val trpc: TrpcClient,
-) : ModelRepository {
+class ModelRepositoryImpl @Inject constructor(private val dao: LocalDao, private val seeder: CatalogSeeder) : ModelRepository {
+    private val json = Json { ignoreUnknownKeys = true }
 
-    override suspend fun listModels(baseUrl: String): AnResult<List<AIModel>> {
-        val input = buildJsonObject { put("isLogin", true) }
-        return trpc.query(baseUrl, "aiProvider.getAiProviderRuntimeState", input) { it.asAIModelList() }
-    }
-    override suspend fun listProviderModels(
-        baseUrl: String,
-        providerId: String,
-    ): AnResult<List<AIModel>> {
-        val input = buildJsonObject { put("id", providerId) }
-        return trpc.query(baseUrl, "aiModel.getAiProviderModelList", input) { el ->
-            el.asAIModelListWithFallback(providerId)
-        }
-    }
-
-    override suspend fun toggleModel(
-        baseUrl: String,
-        modelId: String,
-        providerId: String,
-        enabled: Boolean,
-    ): AnResult<Unit> {
-        val input = buildJsonObject {
-            put("id", modelId)
-            put("providerId", providerId)
-            put("enabled", enabled)
-        }
-        return trpc.mutate(baseUrl, "aiModel.toggleModelEnabled", input) { }
+    private fun ModelRow.asModel(providerName: String?, providerEnabled: Boolean): AIModel {
+        val catalogMetadata = runCatching {
+            json.decodeFromString<ModelCatalogMetadata>(this.metadata)
+        }.getOrDefault(ModelCatalogMetadata())
+        return AIModel(
+            id = id,
+            displayName = displayName,
+            providerId = providerId,
+            providerName = providerName,
+            enabled = enabled,
+            providerEnabled = providerEnabled,
+            type = catalogMetadata.type,
+            description = catalogMetadata.description,
+            contextWindowTokens = catalogMetadata.contextWindowTokens,
+            maxOutput = catalogMetadata.maxOutput,
+            abilities = catalogMetadata.abilities,
+            family = catalogMetadata.family,
+            generation = catalogMetadata.generation,
+            knowledgeCutoff = catalogMetadata.knowledgeCutoff,
+            chatSupported = catalogMetadata.chatSupported,
+        )
     }
 
-    override suspend fun getReasoningConfig(
-        baseUrl: String,
-        modelId: String,
-        providerId: String,
-    ): AnResult<ReasoningConfig> {
-        val input = buildJsonObject {
-            put("id", modelId)
-            put("providerId", providerId)
-        }
-        return trpc.query(baseUrl, "aiModel.getAiModelReasoningConfig", input) { el ->
-            val obj = el as? JsonObject ?: return@query ReasoningConfig()
-            fun str(key: String): String? =
-                (obj[key] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
-            val raw = obj.entries.mapNotNull { (k, v) ->
-                (v as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }?.let { k to it }
-            }.toMap()
-            ReasoningConfig(
-                effort = str("effort"),
-                reasoningEffort = str("reasoningEffort"),
-                thinkingLevel = str("thinkingLevel"),
-                raw = raw,
-            )
+    override suspend fun listModels(): AnResult<List<AIModel>> = attempt {
+        seeder.ensureSeeded()
+        val providers = dao.providers().associateBy { it.id }
+        dao.models().map { row ->
+            val provider = providers[row.providerId]
+            row.asModel(provider?.name, provider?.enabled == true)
         }
     }
 
-    override suspend fun updateReasoningConfig(
-        baseUrl: String,
-        modelId: String,
-        providerId: String,
-        value: Map<String, String>,
-    ): AnResult<Unit> {
-        val input = buildJsonObject {
-            put("id", modelId)
-            put("providerId", providerId)
-            put("value", buildJsonObject {
-                value.forEach { (k, v) -> put(k, v) }
-            })
-        }
-        return trpc.mutate(baseUrl, "aiModel.updateAiModelReasoningConfig", input) { }
+    override suspend fun listProviderModels(providerId: String): AnResult<List<AIModel>> = attempt {
+        seeder.ensureSeeded()
+        val provider = dao.provider(providerId)
+        dao.modelsFor(providerId).map { it.asModel(provider?.name, provider?.enabled == true) }
+    }
+
+
+    override suspend fun toggleModel(modelId: String, providerId: String, enabled: Boolean): AnResult<Unit> = attempt {
+        val old = dao.model(providerId, modelId) ?: error("Model not found")
+        val metadata = runCatching {
+            json.decodeFromString<ModelCatalogMetadata>(old.metadata)
+        }.getOrDefault(ModelCatalogMetadata())
+        require(!enabled || metadata.chatSupported) { "This model has no local chat adapter" }
+        dao.putModel(old.copy(enabled = enabled))
+    }
+    override suspend fun getReasoningConfig(modelId: String, providerId: String): AnResult<ReasoningConfig> = attempt {
+        val stored = dao.reasoning(providerId, modelId)?.value ?: return@attempt ReasoningConfig()
+        json.decodeFromString<ReasoningConfig>(stored)
+    }
+    override suspend fun updateReasoningConfig(modelId: String, providerId: String, value: Map<String, String>): AnResult<Unit> = attempt {
+        val config = ReasoningConfig(value["effort"], value["reasoningEffort"], value["thinkingLevel"], value)
+        dao.putReasoning(ReasoningRow(providerId, modelId, json.encodeToString(config)))
     }
 }
+private suspend fun <T> attempt(block: suspend () -> T): AnResult<T> = try { AnResult.Ok(block()) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { AnResult.Err(AnError("LOCAL_DATA", e.message ?: "Local data operation failed", e)) }

@@ -7,7 +7,6 @@ import cc.jaxy.anlobehub.core.data.agent.Agent
 import cc.jaxy.anlobehub.core.data.agent.AgentRepository
 import cc.jaxy.anlobehub.core.data.chat.AIModel
 import cc.jaxy.anlobehub.core.data.chat.ModelRepository
-import cc.jaxy.anlobehub.core.data.session.ServerStore
 import cc.jaxy.anlobehub.core.designsystem.text.UiText
 import cc.jaxy.anlobehub.core.designsystem.text.toUiText
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -16,12 +15,10 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @HiltViewModel
 class AgentsViewModel @Inject constructor(
-    private val serverStore: ServerStore,
     private val agentRepository: AgentRepository,
     private val modelRepository: ModelRepository,
 ) : ViewModel() {
@@ -44,17 +41,9 @@ class AgentsViewModel @Inject constructor(
     fun refresh() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(loading = true, error = null)
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
-            if (baseUrl.isNullOrBlank()) {
-                _uiState.value = _uiState.value.copy(
-                    loading = false,
-                    error = UiText.Res(R.string.agents_no_server),
-                )
-                return@launch
-            }
             // Agents + models in parallel; models only back the create sheet.
-            val agentsDeferred = async { agentRepository.listAgents(baseUrl) }
-            val modelsDeferred = async { modelRepository.listModels(baseUrl) }
+            val agentsDeferred = async { agentRepository.listAgents() }
+            val modelsDeferred = async { modelRepository.listModels() }
             when (val result = agentsDeferred.await()) {
                 is AnResult.Ok -> _uiState.value = _uiState.value.copy(
                     loading = false,
@@ -74,13 +63,6 @@ class AgentsViewModel @Inject constructor(
     }
 
     fun deleteAgent(id: String) {
-        val agent = _uiState.value.agents.find { it.id == id }
-        if (agent?.isInbox == true) {
-            _uiState.value = _uiState.value.copy(
-                error = UiText.Res(R.string.agents_inbox_delete_error),
-            )
-            return
-        }
         if (id in _uiState.value.operatingIds) return
         viewModelScope.launch {
             val snapshot = _uiState.value.agents
@@ -89,16 +71,7 @@ class AgentsViewModel @Inject constructor(
                 operatingIds = _uiState.value.operatingIds + id,
                 error = null,
             )
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
-            if (baseUrl.isNullOrBlank()) {
-                _uiState.value = _uiState.value.copy(
-                    agents = snapshot,
-                    operatingIds = _uiState.value.operatingIds - id,
-                    error = UiText.Res(R.string.agents_no_server),
-                )
-                return@launch
-            }
-            when (val result = agentRepository.remove(baseUrl, id)) {
+            when (val result = agentRepository.remove(id)) {
                 is AnResult.Ok -> {
                     _uiState.value = _uiState.value.copy(
                         operatingIds = _uiState.value.operatingIds - id,
@@ -122,15 +95,7 @@ class AgentsViewModel @Inject constructor(
                 operatingIds = _uiState.value.operatingIds + id,
                 error = null,
             )
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
-            if (baseUrl.isNullOrBlank()) {
-                _uiState.value = _uiState.value.copy(
-                    operatingIds = _uiState.value.operatingIds - id,
-                    error = UiText.Res(R.string.agents_no_server),
-                )
-                return@launch
-            }
-            when (val result = agentRepository.duplicate(baseUrl, id)) {
+            when (val result = agentRepository.duplicate(id)) {
                 is AnResult.Ok -> {
                     _uiState.value = _uiState.value.copy(
                         operatingIds = _uiState.value.operatingIds - id,

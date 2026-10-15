@@ -67,10 +67,8 @@ android {
 
 dependencies {
     implementation(project(":core:common"))
-    implementation(project(":core:network"))
     implementation(project(":core:data"))
     implementation(project(":core:designsystem"))
-    implementation(project(":feature:auth"))
     implementation(project(":feature:chat"))
     implementation(project(":feature:agents"))
     implementation(project(":feature:models"))
@@ -96,6 +94,7 @@ dependencies {
     implementation(libs.hilt.android)
     implementation(libs.coil.compose)
     implementation(libs.coil.network)
+    implementation(libs.okhttp)
     implementation(libs.markdown.m3)
     ksp(libs.hilt.compiler)
 

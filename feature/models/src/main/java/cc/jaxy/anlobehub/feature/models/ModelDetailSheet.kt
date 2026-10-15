@@ -135,6 +135,9 @@ fun ModelDetailSheet(
                 model.contextWindowTokens?.let { add(stringResource(R.string.models_detail_context) to formatTokens(it)) }
                 model.maxOutput?.let { add(stringResource(R.string.models_detail_output) to formatTokens(it)) }
                 model.type?.takeIf { t -> t.isNotBlank() }?.let { add(stringResource(R.string.models_detail_type) to it) }
+                model.family?.takeIf(String::isNotBlank)?.let { add(stringResource(R.string.models_detail_family) to it) }
+                model.generation?.takeIf(String::isNotBlank)?.let { add(stringResource(R.string.models_detail_generation) to it) }
+                model.knowledgeCutoff?.takeIf(String::isNotBlank)?.let { add(stringResource(R.string.models_detail_knowledge_cutoff) to it) }
             }
             if (specs.isNotEmpty()) {
                 specs.forEach { (label, value) ->

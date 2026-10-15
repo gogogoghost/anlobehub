@@ -1,62 +1,35 @@
-# anlobehub
+# Local Agent for Android
 
-A native Android client (Jetpack Compose) for LobeHub servers — official cloud
-or self-hosted. It replicates the official app / PWA mobile experience:
-server picker, email+password sign-in, sessions/topics/messages, streaming
-chat, model switching, file upload, knowledge-base and assistant browsing,
-settings.
+A standalone, local-first Android agent app built with Jetpack Compose. It is not a LobeHub client and does not require a hosted server, account, or sign-in.
 
-## Tech stack
+Agents, conversations, messages, provider settings, model lists, and UI preferences are stored on-device. Chat requests go directly from the device to the provider endpoint selected by the user. Local/LAN inference servers can be configured; cloud providers still require their own API credentials and network access. No chat data is sent to LobeHub.
 
-- AGP 9.4 + Gradle 9.6 + Kotlin 2.3.20 (AGP built-in Kotlin) + KSP 2.3.12 + Hilt 2.60.1
-- Compose BOM 2026.09.00 (Material3) + type-safe Navigation Compose 2.10 + Paging + Coil 3 + mikepenz Markdown
-- OkHttp 5 (tRPC + cookies + Gateway WebSocket) + kotlinx.serialization + DataStore + Room
-- minSdk 26, target/compileSdk 37, JDK 17+ (verified with JDK 26/27)
+## Features
 
-## Modules
+- Create, edit, duplicate, and delete local agents with system prompts, model binding, opening messages/questions, and local avatars.
+- Keep per-agent conversation history locally; resume, start, and delete conversations.
+- Configure provider endpoints and models locally; use built-in provider settings or add an OpenAI-compatible endpoint.
+- Providers and models start disabled; enable the providers and chat models you choose to use.
+- Upgrading an existing installation disables old provider/model activation once, then preserves later manual choices.
+- Stream model output directly from supported provider APIs; model availability and protocol support depend on the configured provider.
+- Supported direct adapters: 60 OpenAI Chat Completions-compatible providers, 3 OpenAI-compatible routers, 2 Anthropic Messages providers, Gemini, and Ollama. OAuth-only providers and protocols without a local adapter remain unavailable; unsupported requests are never redirected to another provider or service.
+- Choose app language, theme, and dynamic color.
+- Use Android Auto Backup / device transfer for the local database, app preferences, and local attachments when system backup is enabled.
 
-- `app`: MainActivity, NavHost (Startup→Server→Login→Sessions→Chat/Settings→KB/Assistants), session restore
-- `core:common`: AnResult error model, normalizeBaseUrl, coroutine scopes
-- `core:network`: SuperJson, TrpcClient (tRPC v11 batch), BetterAuthApi, PersistentCookieStore, AgentApi, GatewaySocket (WS v1/v2)
-- `core:data`: ServerStore, UiPreferencesStore, Auth/Session/Topic/Message/Model/User/File/Discovery repositories
-- `core:designsystem`: AnlobehubTheme, MarkdownText, AnTopBar, Loading/Empty/Error, UiText, shared strings
-- `feature:auth/sessions/chat/settings`: screens + ViewModels, each with own `res/values[-zh-rCN]/strings.xml`
+## Privacy and backup
 
-## Localization & theming
+Provider credentials are encrypted with Android Keystore AES-GCM and stored under Android's no-backup directory. The encryption key and credential ciphertext are intentionally excluded from cloud backup and device transfer. After restoring an app backup, re-enter provider API keys; provider names, endpoints, agents, conversations, messages, UI settings, and local files are backed up.
 
-- English in default `values/` (fallback), Simplified Chinese in `values-zh-rCN/`.
-- ViewModels expose `UiText`; screens resolve at the edge. Shared error
-  mapping lives in `ErrorUiText.kt`.
-- Language: System / Chinese / English (per-app locales via AppCompatDelegate).
-- Theme: System / Light / Dark, persisted in DataStore, applied without restart.
-- Both are switchable in Settings → Appearance.
+The app remains usable offline for agent management and history. Model generation requires the configured provider endpoint to be reachable. For local inference, configure an on-device or LAN-compatible endpoint.
 
-## Protocol
-
-See `docs/api-contract.md` (tRPC `/trpc/mobile` + superjson, Better Auth cookie
-sign-in, Agent Gateway WS streaming). PWA parity scope: `docs/pwa-parity.md`.
+The bundled provider/model metadata snapshot uses the public LobeHub Model Bank (commit `6c7a6fb033e443bc27bf34cbd5509ab3db7f22f3`) as a static catalog source only: 85 provider entries and 1,886 model entries. The app makes no runtime requests to LobeHub. Local chat support is derived from the provider protocol/adapter and each model's chat type, enabling 67 bundled providers; non-chat models and unsupported protocols remain browsable but unavailable for chat.
 
 ## Build
 
 ```bash
-# Requires Android SDK (platform 37) and JDK 17+
+# Requires Android SDK platform 37 and JDK 17+
 echo "sdk.dir=/path/to/Android/Sdk" > local.properties
-./gradlew :app:assembleDebug        # app/build/outputs/apk/debug/
-./gradlew :app:assembleRelease      # R8, app-release-unsigned.apk
-./gradlew test lint                  # unit tests + lint (0 errors)
+./gradlew :app:assembleDebug
+./gradlew :app:assembleRelease
+./gradlew test
 ```
-
-Device/emulator smoke: install the debug APK → pick official cloud or enter a
-self-hosted URL (e.g. `https://lobe.example.com`) → sign in with email+password →
-open a session and send a message (server needs models + Agent Gateway).
-
-## Self-hosted server requirements
-
-- lobe-chat v2.x (verified against main, Better Auth; legacy NextAuth builds incompatible)
-- Email+password sign-in enabled (`AUTH_DISABLE_EMAIL_PASSWORD` not true)
-- Streaming requires the Agent Gateway (`config.getGlobalConfig.serverConfig.agentGatewayUrl` reachable)
-
-## Known v1 limits
-
-- Attachment fileIds not yet passed to execAgent (gateway attachment shape TBD); the upload chain itself works
-- Knowledge bases / assistants are read-only; MCP/plugin execution, TTS, SSO/passkey, push, multi-agent orchestration not done

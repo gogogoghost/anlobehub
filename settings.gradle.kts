@@ -20,13 +20,11 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "anlobehub"
+rootProject.name = "local-agent"
 include(":app")
 include(":core:common")
-include(":core:network")
 include(":core:data")
 include(":core:designsystem")
-include(":feature:auth")
 include(":feature:chat")
 include(":feature:agents")
 include(":feature:models")

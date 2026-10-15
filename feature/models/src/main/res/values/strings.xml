@@ -4,10 +4,9 @@
     <string name="models_title">Select model</string>
     <string name="models_search_hint">Search models</string>
     <string name="models_empty_title">No models available</string>
-    <string name="models_empty_desc">Check the server model configuration</string>
+    <string name="models_empty_desc">Add or enable a model from a local provider in Settings</string>
     <string name="models_no_match_title">No matching models</string>
     <string name="models_no_match_desc">Try a different keyword</string>
-    <string name="models_no_server">No server configured. Set the server address in Settings first.</string>
     <string name="models_detail">Model details</string>
     <string name="models_ability_vision">Vision</string>
     <string name="models_ability_reasoning">Reasoning</string>
@@ -21,6 +20,9 @@
     <string name="models_detail_context">Context</string>
     <string name="models_detail_output">Max output</string>
     <string name="models_detail_type">Type</string>
+    <string name="models_detail_family">Family</string>
+    <string name="models_detail_generation">Generation</string>
+    <string name="models_detail_knowledge_cutoff">Knowledge cutoff</string>
     <string name="models_detail_description">Description</string>
     <string name="models_detail_reasoning_title">Reasoning strength</string>
     <string name="models_detail_effort">Effort</string>

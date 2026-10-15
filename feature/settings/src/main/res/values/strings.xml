@@ -1,29 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Settings strings: defaults are English, Chinese lives in values-zh-rCN/. -->
 <resources>
-    <string name="settings_signout_title">Sign out</string>
-    <string name="settings_signout_text">Sign out of the current account? You will need to sign in again.</string>
-    <string name="settings_signout_subtitle">Sign out of the current account</string>
-    <string name="section_account">Account</string>
-    <string name="section_server">Server</string>
-    <string name="section_content">Content</string>
-    <string name="section_actions">Actions</string>
     <string name="section_appearance">Appearance</string>
-    <string name="server_address">Server address</string>
-    <string name="server_unset">Not set</string>
-    <string name="server_copied">Server address copied</string>
-    <string name="kb_title">Knowledge bases</string>
     <string name="providers_title">Providers</string>
     <string name="providers_empty_title">No providers</string>
     <string name="provider_models_empty_title">No models</string>
-    <string name="browse">Browse</string>
+    <string name="providers_local_description">Requests go directly from this device to the configured provider.</string>
+    <string name="provider_custom_add">Add custom OpenAI-compatible provider</string>
+    <string name="provider_custom_title">Add custom provider</string>
+    <string name="provider_custom_name">Provider name</string>
+    <string name="provider_custom_endpoint">API endpoint</string>
+    <string name="provider_custom_endpoint_hint">https://api.example.com/v1</string>
+    <string name="provider_custom_direct_note">Requests will be sent directly from this device to this endpoint.</string>
+    <string name="provider_custom_create">Create</string>
     <string name="version_format">Version %1$s</string>
-    <string name="account_signed_out">Signed out</string>
-    <string name="account_signed_in">Signed in</string>
-    <string name="no_server">No server configured. Set the server address first.</string>
-    <string name="kb_empty_title">No knowledge bases</string>
-    <string name="kb_untitled">Untitled knowledge base</string>
-    <string name="kb_wip">Knowledge base details coming soon</string>
     <string name="discovery_empty_desc">Pull to refresh, or check back later</string>
     <string name="provider_detail_section_basic">Basic info</string>
     <string name="provider_detail_section_credentials">Credentials</string>
@@ -61,16 +51,12 @@
 
 
     <string name="provider_cfg_apikey_desc">Enter your %1$s API Key</string>
-    <string name="provider_cfg_baseurl_title">API Proxy URL</string>
+    <string name="provider_cfg_baseurl_title">API endpoint</string>
     <string name="provider_cfg_baseurl_desc">Must include http(s)://</string>
     <string name="provider_cfg_baseurl_invalid">Enter a valid URL</string>
-    <string name="provider_cfg_fetch_title">Use Client Request Mode</string>
-    <string name="provider_cfg_fetch_desc">Requests go directly from this device, which can improve response speed</string>
-    <string name="provider_cfg_responses_title">Use Responses API</string>
-    <string name="provider_cfg_responses_desc">New-generation request format; unlocks reasoning and other advanced features (OpenAI models only)</string>
-    <string name="provider_cfg_aesgcm">Your keys and proxy URLs are encrypted with AES-GCM</string>
-    <string name="provider_cfg_oauth_unsupported">This provider uses OAuth device flow, which is not supported in the app yet. Configure it on the web instead.</string>
-    <string name="provider_cfg_noconfig">This provider is managed by the server and needs no configuration.</string>
+    <string name="provider_cfg_aesgcm">Secret credentials use Android Keystore AES-GCM and are excluded from backups.</string>
+    <string name="provider_cfg_oauth_unsupported">This provider requires OAuth device flow, which is not supported by this app.</string>
+    <string name="provider_cfg_noconfig">No additional provider configuration is available in the app.</string>
     <string name="provider_cfg_azure_token_title">API Key</string>
     <string name="provider_cfg_azure_token_hint">Azure API Key</string>
     <string name="provider_cfg_azure_token_desc">Find it under Keys and Endpoints in the Azure portal. KEY1 or KEY2 both work.</string>
@@ -127,7 +113,7 @@
     <string name="provider_cfg_comfy_key_title">API Key</string>
     <string name="provider_cfg_comfy_key_hint">Enter API key</string>
     <string name="provider_cfg_comfy_key_desc">API key for Bearer token authentication.</string>
-    <string name="provider_cfg_comfy_custom_note">Custom headers can only be edited on the web for now.</string>
+    <string name="provider_cfg_comfy_custom_note">Custom request headers are not supported in this app.</string>
     <string name="provider_cfg_github_pat_title">GitHub PAT</string>
     <string name="provider_cfg_github_pat_hint">ghp_xxxxxx</string>
     <string name="provider_cfg_github_pat_desc">Enter your GitHub personal access token.</string>
@@ -142,9 +128,15 @@
     <string name="provider_cfg_newapi_endpoint_title">API Address</string>
     <string name="provider_cfg_newapi_endpoint_desc">New API service address; usually without /v1.</string>
     <string name="providers_search_hint">Search providers</string>
+    <string name="provider_id_chat_unavailable">%1$s · Local chat adapter unavailable</string>
+    <string name="provider_detail_chat_unsupported">Provider and model metadata are bundled locally, but this app has no direct chat adapter for this provider.</string>
+    <string name="provider_detail_models_count">%1$d bundled models</string>
+    <string name="provider_detail_api_key_url">API key page</string>
+    <string name="provider_detail_models_url">Model documentation</string>
+    <string name="provider_detail_website">Provider website</string>
+    <string name="provider_model_no_chat_adapter">Catalog entry only; no local chat adapter</string>
     <string name="providers_search_empty">No matching providers</string>
     <string name="provider_models_search_hint">Search models</string>
     <string name="provider_models_search_empty">No matching models</string>
 
-    <string name="avatar_upload_failed">Avatar upload failed</string>
 </resources>

@@ -6,7 +6,6 @@
     <string name="models_empty_desc">请检查服务端模型配置</string>
     <string name="models_no_match_title">无匹配模型</string>
     <string name="models_no_match_desc">换个关键词试试</string>
-    <string name="models_no_server">尚未设置服务器，请先前往设置页配置服务器地址</string>
     <string name="models_detail">模型详情</string>
     <string name="models_ability_vision">视觉</string>
     <string name="models_ability_reasoning">推理</string>
@@ -20,6 +19,9 @@
     <string name="models_detail_context">上下文</string>
     <string name="models_detail_output">最大输出</string>
     <string name="models_detail_type">类型</string>
+    <string name="models_detail_family">模型家族</string>
+    <string name="models_detail_generation">代际</string>
+    <string name="models_detail_knowledge_cutoff">知识截止</string>
     <string name="models_detail_description">简介</string>
     <string name="models_detail_reasoning_title">推理强度</string>
     <string name="models_detail_effort">Effort</string>

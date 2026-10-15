@@ -1,15 +1,10 @@
 package cc.jaxy.anlobehub.core.common.util
 
 /**
- * Native mirror of web `ModelProviderCard.settings` + the 11 special detail
- * pages under `src/features/Settings/provider/detail/`.
+ * Static provider configuration metadata adapted from upstream Model Bank entries.
  *
- * Each builtin provider resolves to one [ProviderConfigSpec] describing which
- * config fields render on the detail page, in web `ProviderConfig` order:
- * API key → endpoint → Responses API switch → client-fetch switch → checker.
- *
- * Sources: `packages/model-bank/src/modelProviders/&ast;.ts` (86 cards),
- * `ProviderConfig/index.tsx`, `providerSettings.ts`, `Checker.tsx`.
+ * Local forms render API keys, endpoints, extra fields, and authentication modes
+ * from this specification; provider requests and settings remain on-device.
  */
 
 /** KeyVaults wire keys shared by all providers. */
@@ -73,9 +68,8 @@ data class ProviderConfigSpec(
     val authModeKey: String? = null,
     val defaultShowBrowserRequest: Boolean = false,
     val disableBrowserRequest: Boolean = false,
-    val supportResponsesApi: Boolean = false,
     val showChecker: Boolean = true,
-    /** `lobehub` hides the whole config section. */
+    /** Whether this provider exposes an editable configuration form. */
     val showConfig: Boolean = true,
     val isOAuth: Boolean = false,
     val checkModel: String? = null,
@@ -117,8 +111,8 @@ private val CARD_SPECS: Map<String, ProviderConfigSpec> = mapOf(
         checkModel = "claude-opus-4-5-20251101",
     ),
     // azure/azureai get apiKeyItems + endpoint via detail overrides below.
-    "azure" to ProviderConfigSpec(defaultShowBrowserRequest = true),
-    "azureai" to ProviderConfigSpec(defaultShowBrowserRequest = true),
+    "azure" to ProviderConfigSpec(),
+    "azureai" to ProviderConfigSpec(),
     "baichuan" to ProviderConfigSpec(
         endpoint = ep("https://api.baichuan-ai.com/v1"), checkModel = "Baichuan3-Turbo",
     ),
@@ -209,7 +203,6 @@ private val CARD_SPECS: Map<String, ProviderConfigSpec> = mapOf(
         endpoint = ep("http://127.0.0.1:1234/v1"),
         defaultShowBrowserRequest = true,
     ),
-    "lobehub" to ProviderConfigSpec(showConfig = false),
     "longcat" to ProviderConfigSpec(
         endpoint = ep("https://api.longcat.chat/openai/v1"), checkModel = "LongCat-2.0",
     ),
@@ -264,10 +257,10 @@ private val CARD_SPECS: Map<String, ProviderConfigSpec> = mapOf(
     "ollamacloud" to ProviderConfigSpec(
         disableBrowserRequest = true, checkModel = "gpt-oss:20b",
     ),
-    // openai endpoint/key visibility driven by server flags (default on).
+    // OpenAI uses a direct OpenAI-compatible endpoint.
     "openai" to ProviderConfigSpec(
         endpoint = ep("https://api.openai.com/v1"),
-        supportResponsesApi = true, checkModel = "gpt-5.2",
+        checkModel = "gpt-5.2",
     ),
     "opencodecodingplan" to ProviderConfigSpec(
         endpoint = ep("https://opencode.ai/zen/go/v1"),
@@ -400,33 +393,18 @@ private val CARD_SPECS: Map<String, ProviderConfigSpec> = mapOf(
     "zai" to ProviderConfigSpec(),
 )
 
-/**
- * Custom providers: generic key + endpoint, Responses API switch when the
- * server reports an openai/router sdkType.
- */
-fun customProviderSpec(sdkType: String?): ProviderConfigSpec = ProviderConfigSpec(
+/** Custom providers use the generic OpenAI-compatible key and endpoint form. */
+fun customProviderSpec(): ProviderConfigSpec = ProviderConfigSpec(
     endpoint = ep(GENERIC_ENDPOINT_PLACEHOLDER),
-    supportResponsesApi = sdkType == "openai" || sdkType == "router",
 )
 
 /**
- * Resolve the render spec for [providerId]. Unknown builtin ids fall back to
- * the generic key + endpoint form so new server-side providers stay usable.
+ * Resolve the local configuration form for [providerId]. Unknown ids use the
+ * generic key/endpoint form; model selection is limited to implemented adapters.
  */
 fun providerConfigSpec(providerId: String, source: String?): ProviderConfigSpec {
-    if (source == "custom") return customProviderSpec(sdkType = null)
+    if (source == "custom") return customProviderSpec()
     return CARD_SPECS[providerId.lowercase()]
         ?: ProviderConfigSpec(endpoint = ep(GENERIC_ENDPOINT_PLACEHOLDER))
 }
 
-/** Mirror of web `showClientFetch`: when the client-request switch renders. */
-fun showClientFetchSwitch(
-    spec: ProviderConfigSpec,
-    endpointValue: String?,
-    hasAnyCredential: Boolean,
-): Boolean {
-    if (spec.disableBrowserRequest) return false
-    return spec.defaultShowBrowserRequest ||
-        (spec.endpoint != null && !endpointValue.isNullOrBlank()) ||
-        (spec.showApiKey && hasAnyCredential)
-}

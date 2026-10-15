@@ -2,85 +2,35 @@ package cc.jaxy.anlobehub.core.data.chat
 
 import cc.jaxy.anlobehub.core.common.result.AnError
 import cc.jaxy.anlobehub.core.common.result.AnResult
-import cc.jaxy.anlobehub.core.network.trpc.TrpcClient
+import cc.jaxy.anlobehub.core.data.local.LocalDao
+import cc.jaxy.anlobehub.core.data.local.MessageRow
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.put
-
-data class SendMessageResult(
-    val assistantMessageId: String? = null,
-    val userMessageId: String? = null,
-    val topicId: String? = null,
-    val isCreateNewTopic: Boolean? = null,
-)
+import kotlinx.coroutines.CancellationException
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 
 interface MessageRepository {
-    suspend fun listMessages(
-        baseUrl: String,
-        topicId: String? = null,
-        sessionId: String? = null,
-        agentId: String? = null,
-    ): AnResult<List<ChatMessage>>
-
-    suspend fun sendMessageInServer(
-        baseUrl: String,
-        content: String,
-        topicId: String? = null,
-        sessionId: String? = null,
-        createNewTopic: Boolean? = null,
-    ): AnResult<SendMessageResult>
+    suspend fun listMessages(topicId: String? = null, agentId: String? = null): AnResult<List<ChatMessage>>
+    suspend fun saveMessage(topicId: String, message: ChatMessage): AnResult<Unit>
 }
 
 @Singleton
-class MessageRepositoryImpl @Inject constructor(
-    private val trpc: TrpcClient,
-) : MessageRepository {
-
-    override suspend fun listMessages(
-        baseUrl: String,
-        topicId: String?,
-        sessionId: String?,
-        agentId: String?,
-    ): AnResult<List<ChatMessage>> {
-        val input = buildJsonObject {
-            if (!topicId.isNullOrBlank()) put("topicId", topicId)
-            if (!agentId.isNullOrBlank()) put("agentId", agentId)
-            if (!sessionId.isNullOrBlank()) put("sessionId", sessionId)
-        }.takeIf { it.isNotEmpty() }
-        return trpc.query(baseUrl, "message.getMessages", input) { it.asMessageList() }
-    }
-
-    override suspend fun sendMessageInServer(
-        baseUrl: String,
-        content: String,
-        topicId: String?,
-        sessionId: String?,
-        createNewTopic: Boolean?,
-    ): AnResult<SendMessageResult> {
-        if (content.isBlank()) {
-            return AnResult.Err(AnError(code = "INVALID_INPUT", message = "empty message content"))
-        }
-        val input = buildJsonObject {
-            put("newUserMessage", buildJsonObject { put("content", content) })
-            if (!topicId.isNullOrBlank()) put("topicId", topicId)
-            if (!sessionId.isNullOrBlank()) put("sessionId", sessionId)
-            if (createNewTopic != null) put("newTopic", createNewTopic)
-        }
-        return trpc.mutate(baseUrl, "aiChat.sendMessageInServer", input) { el ->
-            val obj = el as? JsonObject ?: return@mutate SendMessageResult()
-            fun str(key: String): String? =
-                (obj[key] as? JsonPrimitive)?.contentOrNull
-            SendMessageResult(
-                assistantMessageId = str("assistantMessageId"),
-                userMessageId = str("userMessageId"),
-                topicId = str("topicId"),
-                isCreateNewTopic = (obj["isCreateNewTopic"] as? JsonPrimitive)
-                    ?.contentOrNull?.toBooleanStrictOrNull(),
-            )
-        }
-    }
+class MessageRepositoryImpl @Inject constructor(private val dao: LocalDao) : MessageRepository {
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    override suspend fun listMessages(topicId: String?, agentId: String?): AnResult<List<ChatMessage>> = try {
+        AnResult.Ok(dao.messages(topicId, agentId).map { json.decodeFromString<ChatMessage>(it.payload) })
+    } catch (e: CancellationException) { throw e } catch (e: Exception) { AnResult.Err(AnError("LOCAL_DATA", e.message ?: "Unable to read messages", e)) }
+    override suspend fun saveMessage(topicId: String, message: ChatMessage): AnResult<Unit> = try {
+        val normalized = message.copy(createdAt = message.createdAt ?: System.currentTimeMillis())
+        val topic = dao.topic(topicId) ?: error("Topic not found")
+        val createdAt = normalized.createdAt ?: System.currentTimeMillis()
+        val id = normalized.id.ifBlank { java.util.UUID.randomUUID().toString() }
+        dao.putMessageAndTouchTopic(
+            MessageRow(id, topicId, topic.agentId, createdAt, json.encodeToString(normalized.copy(id = id))),
+            updatedAt = maxOf(topic.updatedAt, createdAt),
+        )
+        AnResult.Ok(Unit)
+    } catch (e: CancellationException) { throw e } catch (e: Exception) { AnResult.Err(AnError("LOCAL_DATA", e.message ?: "Unable to save message", e)) }
 }

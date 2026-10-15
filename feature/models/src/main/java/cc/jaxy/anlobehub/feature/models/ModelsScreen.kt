@@ -145,8 +145,8 @@ private fun ModelsContent(
     val snackbar = remember { SnackbarHostState() }
     var query by rememberSaveable { mutableStateOf("") }
     var collapsed by rememberSaveable { mutableStateOf(setOf<String>()) }
-    // Picker shows enabled models only; manage availability in Settings.
-    val enabled = remember(models) { models.filter { it.enabled != false } }
+    // The picker exposes only enabled models backed by a local chat adapter.
+    val enabled = remember(models) { models.filter { it.enabled == true && it.providerEnabled && it.chatSupported } }
     val filtered = remember(enabled, query) {
         if (query.isBlank()) {
             enabled

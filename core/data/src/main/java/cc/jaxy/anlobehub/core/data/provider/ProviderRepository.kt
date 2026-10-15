@@ -2,33 +2,33 @@ package cc.jaxy.anlobehub.core.data.provider
 
 import cc.jaxy.anlobehub.core.common.result.AnError
 import cc.jaxy.anlobehub.core.common.result.AnResult
+import cc.jaxy.anlobehub.core.common.util.FieldType
 import cc.jaxy.anlobehub.core.common.util.buildModelsUrl
 import cc.jaxy.anlobehub.core.common.util.parseModelIds
-import cc.jaxy.anlobehub.core.network.trpc.TrpcClient
+import cc.jaxy.anlobehub.core.common.util.providerConfigSpec
+import cc.jaxy.anlobehub.core.common.util.specialFieldsFor
+import cc.jaxy.anlobehub.core.data.local.CatalogSeeder
+import cc.jaxy.anlobehub.core.data.local.ACTIVATION_DEFAULTS_VERSION
+import cc.jaxy.anlobehub.core.data.local.ACTIVATION_DEFAULTS_VERSION_KEY
+import cc.jaxy.anlobehub.core.data.local.LocalDao
+import cc.jaxy.anlobehub.core.data.local.ModelRow
+import cc.jaxy.anlobehub.core.data.local.ProviderRow
 import java.io.IOException
-import java.util.concurrent.TimeUnit
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.put
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
-/**
- * AI 供应商条目（`aiProvider.getAiProviderList` 返回）。
- *
- * 全字段可空：`enabled` 服务端恒返 bool，缺省按 true 处理。
- */
 data class AiProvider(
     val id: String = "",
     val name: String? = null,
@@ -36,16 +36,8 @@ data class AiProvider(
     val description: String? = null,
     val enabled: Boolean = true,
     val source: String? = null,
+    val chatSupported: Boolean = true,
 )
-
-/**
- * 供应商详情（`aiProvider.getAiProviderById` 返回）。
- *
- * Tolerant 解析：缺字段给缺省；`keyVaults` 整体透出为字符串 map（web
- * `AiProviderKeyVaultsSchema` 为 `Record<string, string|map>`，各供应商键名
- * 不同：`apiKey`/`baseURL`/`region`/`accessKeyId`/…），非字符串值丢弃；
- * 已配置时服务端可能返回掩码值，原样透出、不做脱敏判断。
- */
 data class ProviderDetail(
     val id: String = "",
     val name: String? = null,
@@ -55,247 +47,216 @@ data class ProviderDetail(
     val source: String? = null,
     val checkModel: String? = null,
     val keyVaults: Map<String, String> = emptyMap(),
-    val fetchOnClient: Boolean? = null,
-    val enableResponseApi: Boolean? = null,
+    val websiteUrl: String? = null,
+    val apiKeyUrl: String? = null,
+    val modelsUrl: String? = null,
+    val endpointPlaceholder: String? = null,
+    val showApiKey: Boolean? = null,
+    val authType: String? = null,
+    val catalogProtocol: String? = null,
+    val chatSupported: Boolean = true,
+    val showChecker: Boolean = true,
+    val showModelFetcher: Boolean = false,
+    val modelCount: Int = 0,
 ) {
-    /** Back-compat for the two generic vault keys. */
     val apiKey: String? get() = keyVaults["apiKey"]
     val baseURL: String? get() = keyVaults["baseURL"]
 }
+data class CheckResult(val ok: Boolean = false, val error: String? = null)
 
-data class CheckResult(
-    val ok: Boolean = false,
-    val error: String? = null,
-)
+private val DIRECT_ADAPTER_TYPES = setOf("openai", "router", "anthropic", "google", "ollama")
+private const val GENERIC_COMPAT_ENDPOINT_PLACEHOLDER = "https://your-proxy-url.com/v1"
+
+ 
 
 interface ProviderRepository {
-    suspend fun listProviders(baseUrl: String): AnResult<List<AiProvider>>
-
-    suspend fun toggleProvider(
-        baseUrl: String,
-        id: String,
-        enabled: Boolean,
-    ): AnResult<Unit>
-
-    suspend fun getDetail(baseUrl: String, id: String): AnResult<ProviderDetail>
-
-    suspend fun updateConfig(
-        baseUrl: String,
-        id: String,
-        keyVaults: Map<String, String?> = emptyMap(),
-        checkModel: String? = null,
-        fetchOnClient: Boolean? = null,
-        enableResponseApi: Boolean? = null,
-    ): AnResult<Unit>
-
-    suspend fun checkConnectivity(
-        baseUrl: String,
-        id: String,
-        model: String? = null,
-    ): AnResult<CheckResult>
-
-    suspend fun fetchRemoteModels(
-        baseURL: String,
-        apiKey: String,
-    ): AnResult<List<String>>
+    suspend fun listProviders(): AnResult<List<AiProvider>>
+    suspend fun toggleProvider(id: String, enabled: Boolean): AnResult<Unit>
+    suspend fun getDetail(id: String): AnResult<ProviderDetail>
+    suspend fun updateConfig(id: String, keyVaults: Map<String, String?> = emptyMap(), checkModel: String? = null): AnResult<Unit>
+    suspend fun checkConnectivity(id: String, model: String? = null): AnResult<CheckResult>
+    suspend fun fetchRemoteModels(providerId: String, baseURL: String, apiKey: String): AnResult<List<String>>
+    suspend fun createCustom(name: String, baseURL: String): AnResult<String>
 }
 
 @Singleton
-class ProviderRepositoryImpl @Inject constructor(
-    private val trpc: TrpcClient,
-    private val httpClient: OkHttpClient,
-    private val json: Json,
-) : ProviderRepository {
-
-    override suspend fun listProviders(baseUrl: String): AnResult<List<AiProvider>> {
-        // 无 input：传空 object。
-        return trpc.query(baseUrl, "aiProvider.getAiProviderList", buildJsonObject { }) {
-            it.asAiProviderList()
+class ProviderRepositoryImpl @Inject constructor(private val dao: LocalDao, private val secrets: ProviderSecretStore, private val seeder: CatalogSeeder) : ProviderRepository {
+    private val json = Json { ignoreUnknownKeys = true }
+    private val client = OkHttpClient()
+    private suspend fun seed() = seeder.ensureSeeded()
+    private fun secretKeys(id: String, source: String): Set<String> = buildSet {
+        val spec = providerConfigSpec(id, source)
+        add("apiKey")
+        spec.extraFields.filter { it.type == FieldType.SECRET }.forEach { add(it.key) }
+        spec.authModes.flatMap { it.fields }.filter { it.type == FieldType.SECRET }.forEach { add(it.key) }
+        specialFieldsFor(id)?.let { fields ->
+            fields.apiKeyItems.filter { it.type == FieldType.SECRET }.forEach { add(it.key) }
+            fields.authModes.flatMap { it.fields }.filter { it.type == FieldType.SECRET }.forEach { add(it.key) }
+        }
+        add("accessKeyId")
+        add("username")
+    }
+    override suspend fun listProviders(): AnResult<List<AiProvider>> = action {
+        seed()
+        dao.providers().mapNotNull { row ->
+            if (row.id == "lobehub") return@mapNotNull null
+            val config = json.decodeFromString<Map<String, String>>(row.config)
+            AiProvider(
+                id = row.id,
+                name = row.name,
+                description = config["__catalogDescription"]?.takeIf(String::isNotBlank),
+                enabled = row.enabled,
+                source = row.source,
+                chatSupported = config["__catalogChatSupported"]?.toBoolean()
+                    ?: (row.source == "custom" || config["__sdkType"]?.let { it in DIRECT_ADAPTER_TYPES } == true),
+            )
         }
     }
-
-    override suspend fun toggleProvider(
-        baseUrl: String,
-        id: String,
-        enabled: Boolean,
-    ): AnResult<Unit> {
-        val input = buildJsonObject {
-            put("id", id)
-            put("enabled", enabled)
+    override suspend fun toggleProvider(id: String, enabled: Boolean): AnResult<Unit> = action { seed(); val row = dao.provider(id) ?: error("Provider not found"); dao.putProvider(row.copy(enabled = enabled)) }
+    override suspend fun getDetail(id: String): AnResult<ProviderDetail> = action {
+        seed(); val row = dao.provider(id) ?: error("Provider not found")
+        val stored = json.decodeFromString<Map<String, String>>(row.config)
+        val encrypted = secrets.read(id).toMutableMap()
+        val sensitive = secretKeys(id, row.source)
+        val legacySecrets = stored.filter { (key, value) -> key in sensitive && value.isNotBlank() }
+        val plain = stored.toMutableMap()
+        val hadLegacyFetchSetting = plain.remove("__fetchOnClient") != null
+        val hadLegacyResponseSetting = plain.remove("__enableResponseApi") != null
+        if (legacySecrets.isNotEmpty()) {
+            legacySecrets.forEach { (key, value) -> encrypted.putIfAbsent(key, value) }
+            secrets.write(id, encrypted)
+            legacySecrets.keys.forEach(plain::remove)
         }
-        // 官方供应商禁关：服务端抛 BAD_REQUEST，错误经 AnResult.Err 透给 UI。
-        return trpc.mutate(baseUrl, "aiProvider.toggleProviderEnabled", input) { }
-    }
-
-    override suspend fun getDetail(baseUrl: String, id: String): AnResult<ProviderDetail> {
-        val input = buildJsonObject { put("id", id) }
-        return trpc.query(baseUrl, "aiProvider.getAiProviderById", input) {
-            it.toProviderDetail()
+        if (legacySecrets.isNotEmpty() || hadLegacyFetchSetting || hadLegacyResponseSetting) {
+            dao.putProvider(row.copy(config = json.encodeToString(plain)))
         }
+        val config = plain.filterKeys { !it.startsWith("__") } + encrypted
+        val spec = providerConfigSpec(id, row.source)
+        ProviderDetail(
+            id = id,
+            name = row.name,
+            description = stored["__catalogDescription"]?.takeIf(String::isNotBlank),
+            enabled = row.enabled,
+            source = row.source,
+            checkModel = stored["__checkModel"]?.takeIf(String::isNotBlank)
+                ?: stored["__catalogCheckModel"]?.takeIf(String::isNotBlank)
+                ?: spec.checkModel,
+            keyVaults = config,
+            websiteUrl = stored["__catalogUrl"]?.takeIf(String::isNotBlank),
+            apiKeyUrl = stored["__catalogApiKeyUrl"]?.takeIf(String::isNotBlank),
+            modelsUrl = stored["__catalogModelsUrl"]?.takeIf(String::isNotBlank),
+            endpointPlaceholder = stored["__catalogProxyPlaceholder"]?.takeIf(String::isNotBlank)
+                ?: spec.endpoint?.placeholder
+                ?: GENERIC_COMPAT_ENDPOINT_PLACEHOLDER.takeIf { stored["__sdkType"] in DIRECT_ADAPTER_TYPES },
+            showApiKey = stored["__catalogShowApiKey"]?.toBoolean(),
+            authType = stored["__catalogAuthType"]?.takeIf(String::isNotBlank),
+            catalogProtocol = stored["__catalogProtocol"]?.takeIf(String::isNotBlank),
+            chatSupported = stored["__catalogChatSupported"]?.toBoolean()
+                ?: (row.source == "custom" || stored["__sdkType"]?.let { it in DIRECT_ADAPTER_TYPES } == true),
+            showChecker = stored["__catalogShowChecker"]?.toBoolean() ?: spec.showChecker,
+            showModelFetcher = stored["__catalogShowModelFetcher"]?.toBoolean() ?: (row.source == "custom"),
+            modelCount = stored["__catalogModelCount"]?.toIntOrNull() ?: 0,
+        )
     }
-
-    override suspend fun updateConfig(
-        baseUrl: String,
-        id: String,
-        keyVaults: Map<String, String?>,
-        checkModel: String?,
-        fetchOnClient: Boolean?,
-        enableResponseApi: Boolean?,
-    ): AnResult<Unit> {
-        val vaultsJson = buildJsonObject {
-            keyVaults.forEach { (k, v) ->
-                if (v != null) put(k, v)
+    override suspend fun updateConfig(id: String, keyVaults: Map<String, String?>, checkModel: String?): AnResult<Unit> = action {
+        seed(); val row = dao.provider(id) ?: error("Provider not found")
+        val plain = json.decodeFromString<Map<String, String>>(row.config).toMutableMap().apply {
+            remove("__fetchOnClient")
+            remove("__enableResponseApi")
+        }
+        val encrypted = secrets.read(id).toMutableMap(); val sensitive = secretKeys(id, row.source)
+        keyVaults.forEach { (key, value) ->
+            if (value.isNullOrBlank()) {
+                plain.remove(key)
+                encrypted.remove(key)
+            } else if (key in sensitive) {
+                plain.remove(key)
+                encrypted[key] = value
+            } else {
+                plain[key] = value
             }
         }
-        val value = buildJsonObject {
-            if (vaultsJson.isNotEmpty()) put("keyVaults", vaultsJson)
-            if (checkModel != null) put("checkModel", checkModel)
-            if (fetchOnClient != null) put("fetchOnClient", fetchOnClient)
-            if (enableResponseApi != null) {
-                put("config", buildJsonObject { put("enableResponseApi", enableResponseApi) })
+        if (checkModel != null) plain["__checkModel"] = checkModel
+        secrets.write(id, encrypted)
+        dao.putProvider(row.copy(config = json.encodeToString(plain)))
+    }
+    override suspend fun checkConnectivity(id: String, model: String?): AnResult<CheckResult> = when (val detail = getDetail(id)) {
+        is AnResult.Err -> AnResult.Err(detail.error)
+        is AnResult.Ok -> when (val models = fetchRemoteModels(id, detail.value.baseURL.orEmpty(), detail.value.apiKey.orEmpty())) {
+            is AnResult.Ok -> AnResult.Ok(CheckResult(true))
+            is AnResult.Err -> AnResult.Ok(CheckResult(false, models.error.message))
+        }
+    }
+    override suspend fun fetchRemoteModels(providerId: String, baseURL: String, apiKey: String): AnResult<List<String>> = try {
+        seed()
+        val row = dao.provider(providerId) ?: error("Provider not found")
+        val config = json.decodeFromString<Map<String, String>>(row.config)
+        val sdkType = config["__sdkType"]
+        require(row.source == "custom" || sdkType in DIRECT_ADAPTER_TYPES) {
+            "Model discovery is not implemented for this provider"
+        }
+        val base = baseURL.trimEnd('/')
+        val request = when (sdkType) {
+            "anthropic" -> Request.Builder().url((if (base.endsWith("/v1")) base else "$base/v1") + "/models").get().header("x-api-key", apiKey).header("anthropic-version", "2023-06-01").build()
+            "google" -> Request.Builder().url((if (base.endsWith("/v1beta")) base else "$base/v1beta") + "/models").get().apply { if (apiKey.isNotBlank()) header("x-goog-api-key", apiKey) }.build()
+            "ollama" -> Request.Builder().url(base.removeSuffix("/v1") + "/api/tags").get().build()
+            else -> Request.Builder().url(buildModelsUrl(baseURL)).get().apply { if (apiKey.isNotBlank()) header("Authorization", "Bearer $apiKey") }.build()
+        }
+        val models = withContext(Dispatchers.IO) { client.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IOException("Provider returned HTTP ${response.code}: ${body.take(500)}")
+            val element = json.parseToJsonElement(body)
+            when (sdkType) {
+                "google" -> ((element as? kotlinx.serialization.json.JsonObject)?.get("models") as? kotlinx.serialization.json.JsonArray)?.mapNotNull { model ->
+                    val name = (model as? kotlinx.serialization.json.JsonObject)?.get("name")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull }
+                    name?.removePrefix("models/")?.takeIf(String::isNotBlank)
+                }.orEmpty()
+                "ollama" -> ((element as? kotlinx.serialization.json.JsonObject)?.get("models") as? kotlinx.serialization.json.JsonArray)?.mapNotNull { model ->
+                    (model as? kotlinx.serialization.json.JsonObject)?.get("name")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull?.takeIf(String::isNotBlank) }
+                }.orEmpty()
+                else -> parseModelIds(element)
             }
+        } }
+        val distinctModels = models.distinct()
+        distinctModels.forEach { id ->
+            val old = dao.model(providerId, id)
+            val metadata = old?.metadata?.takeIf { it != "{}" }?.let {
+                runCatching { json.decodeFromString<JsonObject>(it) }.getOrNull()
+            } ?: JsonObject(mapOf("type" to JsonPrimitive("chat")))
+            val stampedMetadata = JsonObject(
+                metadata + (ACTIVATION_DEFAULTS_VERSION_KEY to JsonPrimitive(ACTIVATION_DEFAULTS_VERSION)),
+            )
+            dao.putModel(
+                ModelRow(
+                    id = id,
+                    providerId = providerId,
+                    displayName = id,
+                    enabled = old?.enabled ?: false,
+                    metadata = json.encodeToString(stampedMetadata),
+                ),
+            )
         }
-        val input = buildJsonObject {
-            put("id", id)
-            put("value", value)
-        }
-        return trpc.mutate(baseUrl, "aiProvider.updateAiProviderConfig", input) { }
-    }
-
-    override suspend fun checkConnectivity(
-        baseUrl: String,
-        id: String,
-        model: String?,
-    ): AnResult<CheckResult> {
-        val input = buildJsonObject {
-            put("id", id)
-            if (model != null) put("model", model)
-        }
-        return trpc.mutate(baseUrl, "aiProvider.checkProviderConnectivity", input) {
-            it.toCheckResult()
-        }
-    }
-
-    override suspend fun fetchRemoteModels(
-        baseURL: String,
-        apiKey: String,
-    ): AnResult<List<String>> {
-        val url = try {
-            buildModelsUrl(baseURL)
-        } catch (e: IllegalArgumentException) {
-            return AnResult.Err(AnError("INVALID_INPUT", e.message ?: "invalid baseURL", e))
-        }
-        val request = Request.Builder()
-            .url(url)
-            .get()
-            .header("Authorization", "Bearer $apiKey")
-            .build()
-        val client = httpClient.newBuilder()
-            .connectTimeout(REMOTE_MODELS_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .readTimeout(REMOTE_MODELS_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .writeTimeout(REMOTE_MODELS_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .build()
-        try {
-            return withContext(Dispatchers.IO) {
-                client.newCall(request).execute().use { response ->
-                    val body = try {
-                        response.body.string()
-                    } catch (e: IOException) {
-                        return@use AnResult.Err(AnError("NETWORK", "failed to read response", e))
-                    }
-                    if (!response.isSuccessful) {
-                        val code = response.code
-                        return@use if (code == 401 || code == 403) {
-                            AnResult.Err(AnError("AUTH", "invalid credentials"))
-                        } else {
-                            AnResult.Err(AnError("HTTP_$code", "request failed: HTTP $code"))
-                        }
-                    }
-                    val element = try {
-                        json.parseToJsonElement(body)
-                    } catch (e: Exception) {
-                        return@use AnResult.Err(AnError("UNKNOWN", "invalid JSON response", e))
-                    }
-                    AnResult.Ok(parseModelIds(element))
-                }
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: IOException) {
-            return AnResult.Err(AnError("NETWORK", e.message ?: "network error", e))
-        } catch (e: Exception) {
-            return AnResult.Err(AnError("UNKNOWN", e.message ?: "unknown error", e))
-        }
-    }
-
-    companion object {
-        private const val REMOTE_MODELS_TIMEOUT_SECONDS = 15L
+        AnResult.Ok(distinctModels)
+    } catch (e: CancellationException) { throw e } catch (e: Exception) { AnResult.Err(AnError("PROVIDER", e.message ?: "Unable to fetch models", e)) }
+    override suspend fun createCustom(name: String, baseURL: String): AnResult<String> = action {
+        seed(); require(name.isNotBlank() && baseURL.isNotBlank()) { "Name and base URL are required" }
+        val id = "custom-${UUID.randomUUID()}"
+        dao.putProvider(
+            ProviderRow(
+                id = id,
+                name = name.trim(),
+                source = "custom",
+                enabled = false,
+                config = json.encodeToString(
+                    mapOf(
+                        "baseURL" to baseURL.trimEnd('/'),
+                        "__sdkType" to "openai",
+                        ACTIVATION_DEFAULTS_VERSION_KEY to ACTIVATION_DEFAULTS_VERSION,
+                    ),
+                ),
+            ),
+        )
+        id
     }
 }
-
-fun JsonElement.asAiProviderList(): List<AiProvider> {
-    return try {
-        val items: List<JsonElement> = when (this) {
-            is JsonArray -> this
-            is JsonNull -> return emptyList()
-            is JsonObject -> {
-                (this["items"] as? JsonArray)
-                    ?: (this["data"] as? JsonArray)
-                    ?: (this["providers"] as? JsonArray)
-                    ?: return emptyList()
-            }
-            else -> return emptyList()
-        }
-        items.mapNotNull { runCatching { it.toAiProvider() }.getOrNull() }
-    } catch (_: Exception) {
-        emptyList()
-    }
-}
-
-private fun JsonElement.toAiProvider(): AiProvider {
-    val obj = this as? JsonObject ?: return AiProvider()
-    fun str(key: String): String? =
-        (obj[key] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
-    return AiProvider(
-        id = str("id") ?: "",
-        name = str("name"),
-        logo = str("logo"),
-        description = str("description"),
-        enabled = (obj["enabled"] as? JsonPrimitive)?.contentOrNull
-            ?.toBooleanStrictOrNull() ?: true,
-        source = str("source"),
-    )
-}
-
-private fun JsonElement.toProviderDetail(): ProviderDetail {
-    val obj = this as? JsonObject ?: return ProviderDetail()
-    fun str(key: String): String? =
-        (obj[key] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
-    val vaults = (obj["keyVaults"] as? JsonObject)
-        ?.mapNotNull { (k, v) ->
-            (v as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }?.let { k to it }
-        }?.toMap().orEmpty()
-    val config = obj["config"] as? JsonObject
-    return ProviderDetail(
-        id = str("id") ?: "",
-        name = str("name"),
-        logo = str("logo"),
-        description = str("description"),
-        enabled = (obj["enabled"] as? JsonPrimitive)?.contentOrNull
-            ?.toBooleanStrictOrNull() ?: true,
-        source = str("source"),
-        checkModel = str("checkModel"),
-        keyVaults = vaults,
-        fetchOnClient = (obj["fetchOnClient"] as? JsonPrimitive)?.contentOrNull
-            ?.toBooleanStrictOrNull(),
-        enableResponseApi = (config?.get("enableResponseApi") as? JsonPrimitive)
-            ?.contentOrNull?.toBooleanStrictOrNull(),
-    )
-}
-
-private fun JsonElement.toCheckResult(): CheckResult {
-    val obj = this as? JsonObject ?: return CheckResult(ok = false)
-    val ok = (obj["ok"] as? JsonPrimitive)?.contentOrNull?.toBooleanStrictOrNull() ?: false
-    val error = (obj["error"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
-    return CheckResult(ok = ok, error = error)
-}
+private suspend fun <T> action(block: suspend () -> T): AnResult<T> = try { AnResult.Ok(block()) } catch (e: CancellationException) { throw e } catch (e: Exception) { AnResult.Err(AnError("LOCAL_PROVIDER", e.message ?: "Provider operation failed", e)) }

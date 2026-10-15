@@ -2,91 +2,32 @@ package cc.jaxy.anlobehub.core.data.chat
 
 import cc.jaxy.anlobehub.core.common.result.AnError
 import cc.jaxy.anlobehub.core.common.result.AnResult
-import cc.jaxy.anlobehub.core.network.trpc.TrpcClient
+import cc.jaxy.anlobehub.core.data.local.LocalDao
+import cc.jaxy.anlobehub.core.data.local.TopicRow
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 
 interface TopicRepository {
-    suspend fun listTopics(
-        baseUrl: String,
-        sessionId: String? = null,
-        agentId: String? = null,
-    ): AnResult<List<ChatTopic>>
-
-    suspend fun pageTopics(
-        baseUrl: String,
-        page: Int,
-        pageSize: Int,
-        sessionId: String? = null,
-        agentId: String? = null,
-    ): AnResult<TopicPage>
-    suspend fun createTopic(
-        baseUrl: String,
-        title: String,
-        sessionId: String? = null,
-        agentId: String? = null,
-    ): AnResult<String>
-    suspend fun deleteTopic(baseUrl: String, id: String): AnResult<Unit>
+    suspend fun listTopics(agentId: String? = null): AnResult<List<ChatTopic>>
+    suspend fun pageTopics(page: Int, pageSize: Int, agentId: String? = null): AnResult<TopicPage>
+    suspend fun createTopic(title: String, agentId: String? = null): AnResult<String>
+    suspend fun deleteTopic(id: String): AnResult<Unit>
 }
 
 @Singleton
-class TopicRepositoryImpl @Inject constructor(
-    private val trpc: TrpcClient,
-) : TopicRepository {
-
-    override suspend fun listTopics(
-        baseUrl: String,
-        sessionId: String?,
-        agentId: String?,
-    ): AnResult<List<ChatTopic>> {
-        val input = buildJsonObject {
-            if (!agentId.isNullOrBlank()) put("agentId", agentId)
-            if (!sessionId.isNullOrBlank()) put("sessionId", sessionId)
-        }.takeIf { it.isNotEmpty() }
-        return trpc.query(baseUrl, "topic.getTopics", input) { it.asTopicList() }
+class TopicRepositoryImpl @Inject constructor(private val dao: LocalDao) : TopicRepository {
+    override suspend fun listTopics(agentId: String?): AnResult<List<ChatTopic>> = wrap { dao.topics(agentId).map { ChatTopic(it.id, it.title, it.createdAt, it.updatedAt, it.agentId) } }
+    override suspend fun pageTopics(page: Int, pageSize: Int, agentId: String?): AnResult<TopicPage> = wrap {
+        require(page >= 0 && pageSize > 0) { "page must be nonnegative and pageSize must be positive" }
+        val all = dao.topics(agentId)
+        val start = (page.toLong() * pageSize).coerceAtMost(all.size.toLong()).toInt()
+        TopicPage(all.drop(start).take(pageSize).map { ChatTopic(it.id, it.title, it.createdAt, it.updatedAt, it.agentId) }, all.size)
     }
-
-    override suspend fun pageTopics(
-        baseUrl: String,
-        page: Int,
-        pageSize: Int,
-        sessionId: String?,
-        agentId: String?,
-    ): AnResult<TopicPage> {
-        val input = buildJsonObject {
-            if (!agentId.isNullOrBlank()) put("agentId", agentId)
-            if (!sessionId.isNullOrBlank()) put("sessionId", sessionId)
-            // Server paging params are `current` + `pageSize` (`page` is ignored).
-            put("current", page)
-            put("pageSize", pageSize)
-        }
-        return trpc.query(baseUrl, "topic.getTopics", input) { it.asTopicPage() }
+    override suspend fun createTopic(title: String, agentId: String?): AnResult<String> {
+        if (title.isBlank()) return AnResult.Err(AnError("INVALID_INPUT", "empty title"))
+        return wrap { val now = System.currentTimeMillis(); val id = UUID.randomUUID().toString(); dao.putTopic(TopicRow(id, title, now, now, agentId)); id }
     }
-
-    override suspend fun createTopic(
-        baseUrl: String,
-        title: String,
-        sessionId: String?,
-        agentId: String?,
-    ): AnResult<String> {
-        if (title.isBlank()) {
-            return AnResult.Err(AnError(code = "INVALID_INPUT", message = "empty title"))
-        }
-        val input = buildJsonObject {
-            put("title", title)
-            if (!agentId.isNullOrBlank()) put("agentId", agentId)
-            if (!sessionId.isNullOrBlank()) put("sessionId", sessionId)
-        }
-        return trpc.mutate(baseUrl, "topic.createTopic", input) { el ->
-            el.extractId()
-                ?: throw IllegalStateException("missing id in createTopic response")
-        }
-    }
-
-    override suspend fun deleteTopic(baseUrl: String, id: String): AnResult<Unit> {
-        val input = buildJsonObject { put("id", id) }
-        return trpc.mutate(baseUrl, "topic.removeTopic", input) { }
-    }
+    override suspend fun deleteTopic(id: String): AnResult<Unit> = wrap { dao.deleteTopicWithMessages(id) }
 }
+private suspend fun <T> wrap(block: suspend () -> T): AnResult<T> = try { AnResult.Ok(block()) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { AnResult.Err(AnError("LOCAL_DATA", e.message ?: "Local operation failed", e)) }

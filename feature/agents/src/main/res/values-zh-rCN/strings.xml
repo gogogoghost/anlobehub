@@ -10,10 +10,6 @@
     <string name="agents_no_match_title">无匹配智能体</string>
     <string name="agents_no_match_desc">换个关键词试试</string>
     <string name="agents_untitled">未命名智能体</string>
-    <string name="agents_inbox_badge">Lobe AI</string>
-    <string name="agents_inbox_subtitle">默认助手</string>
-    <string name="agents_inbox_delete_error">默认助手不可删除</string>
-    <string name="agents_no_server">尚未设置服务器，请先前往设置页配置服务器地址</string>
     <string name="agents_create_title">新建智能体</string>
     <string name="agents_create_title_label">名称</string>
     <string name="agents_create_title_required">请填写名称</string>
@@ -54,7 +50,7 @@
     <string name="agents_avatar_custom_url">使用图片链接</string>
     <string name="agents_avatar_use_url">使用该链接</string>
 
-    <string name="agents_avatar_upload">上传图片</string>
-    <string name="agents_avatar_uploading">上传中…</string>
-    <string name="agents_avatar_upload_failed">上传失败</string>
+    <string name="agents_avatar_upload">选择图片</string>
+    <string name="agents_avatar_uploading">正在保存到本地…</string>
+    <string name="agents_avatar_upload_failed">无法将图片保存到本地</string>
 </resources>

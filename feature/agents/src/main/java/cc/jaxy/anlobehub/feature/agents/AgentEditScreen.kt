@@ -59,8 +59,8 @@ import cc.jaxy.anlobehub.core.designsystem.R as DsR
 
 /**
  * Standalone create/edit page. `agentId == null` creates a new agent.
- * Field set mirrors web `CreateAgentSchema` core: avatar/title/description/
- * model/systemRole/openingMessage/openingQuestions.
+ * Edits local avatar/title/description/model/systemRole/openingMessage/
+ * openingQuestions fields.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -242,7 +242,7 @@ private fun AgentEditBody(
         SectionTitle(text = stringResource(R.string.agents_edit_section_identity))
         var showAvatarPicker by remember { mutableStateOf(false) }
         LaunchedEffect(state.avatar, state.uploading) {
-            if (!state.uploading && state.avatar.startsWith("http")) {
+            if (!state.uploading && (state.avatar.startsWith("http") || state.avatar.startsWith("file://"))) {
                 showAvatarPicker = false
             }
         }

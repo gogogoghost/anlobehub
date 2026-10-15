@@ -40,7 +40,6 @@ import androidx.lifecycle.viewModelScope
 import cc.jaxy.anlobehub.core.common.result.AnResult
 import cc.jaxy.anlobehub.core.data.chat.AIModel
 import cc.jaxy.anlobehub.core.data.chat.ModelRepository
-import cc.jaxy.anlobehub.core.data.session.ServerStore
 import cc.jaxy.anlobehub.core.designsystem.component.AnTopBar
 import cc.jaxy.anlobehub.core.designsystem.component.EmptyBox
 import cc.jaxy.anlobehub.core.designsystem.component.ErrorBox
@@ -58,12 +57,10 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @HiltViewModel
 internal class ProviderModelsViewModel @Inject constructor(
-    private val serverStore: ServerStore,
     private val modelRepository: ModelRepository,
 ) : ViewModel() {
 
@@ -92,12 +89,7 @@ internal class ProviderModelsViewModel @Inject constructor(
             val id = providerId
             if (id.isBlank()) return@launch
             _uiState.value = _uiState.value.copy(loading = true, error = null)
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
-            if (baseUrl.isNullOrBlank()) {
-                _uiState.value = UiState(loading = false, error = UiText.Res(R.string.no_server))
-                return@launch
-            }
-            when (val result = modelRepository.listProviderModels(baseUrl, id)) {
+            when (val result = modelRepository.listProviderModels(id)) {
                 is AnResult.Ok -> _uiState.value = UiState(loading = false, models = result.value)
                 is AnResult.Err -> _uiState.value = _uiState.value.copy(
                     loading = false,
@@ -116,19 +108,9 @@ internal class ProviderModelsViewModel @Inject constructor(
             val current = _uiState.value.models
             val targetProviderId = model.providerId ?: providerId
             _uiState.value = _uiState.value.copy(
-                models = current.map {
-                    if (it.id == model.id) it.copy(enabled = enabled) else it
-                },
+                models = current.map { if (it.id == model.id) it.copy(enabled = enabled) else it },
             )
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
-            if (baseUrl.isNullOrBlank()) {
-                _uiState.value = _uiState.value.copy(models = current)
-                _errorEvent.value = UiText.Res(R.string.no_server)
-                return@launch
-            }
-            when (
-                val result = modelRepository.toggleModel(baseUrl, model.id, targetProviderId, enabled)
-            ) {
+            when (val result = modelRepository.toggleModel(model.id, targetProviderId, enabled)) {
                 is AnResult.Ok -> Unit
                 is AnResult.Err -> {
                     _uiState.value = _uiState.value.copy(models = current)
@@ -282,19 +264,37 @@ private fun ProviderModelRow(
                 )
             },
             supportingContent = {
-                Text(
-                    text = model.id,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Column {
+                    Text(
+                        text = model.id,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (!model.chatSupported) {
+                        Text(
+                            text = stringResource(R.string.provider_model_no_chat_adapter),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        model.type?.takeIf(String::isNotBlank)?.let { type ->
+                            Text(
+                                text = type.uppercase(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
             },
             leadingContent = {
                 ModelIcon(modelId = model.id, providerId = providerId, label = model.displayName?.takeIf { it.isNotBlank() } ?: model.id, size = 40.dp)
             },
             trailingContent = {
                 Switch(
-                    checked = model.enabled ?: false,
+                    checked = model.enabled == true,
                     onCheckedChange = onToggle,
+                    enabled = model.chatSupported,
                 )
             },
         )

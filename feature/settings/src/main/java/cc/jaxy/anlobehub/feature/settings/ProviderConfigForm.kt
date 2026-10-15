@@ -20,14 +20,12 @@ import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -41,10 +39,8 @@ import cc.jaxy.anlobehub.core.common.util.SpecialField
 import cc.jaxy.anlobehub.core.common.util.SpecialFields
 import cc.jaxy.anlobehub.core.common.util.VAULT_API_KEY
 import cc.jaxy.anlobehub.core.common.util.VAULT_BASE_URL
-import cc.jaxy.anlobehub.core.common.util.VAULT_ENDPOINT
 import cc.jaxy.anlobehub.core.common.util.inferBedrockAuthMode
 import cc.jaxy.anlobehub.core.common.util.providerConfigSpec
-import cc.jaxy.anlobehub.core.common.util.showClientFetchSwitch
 import cc.jaxy.anlobehub.core.common.util.specialFieldsFor
 import cc.jaxy.anlobehub.core.data.provider.ProviderDetail
 import cc.jaxy.anlobehub.core.designsystem.component.AnTextField
@@ -52,29 +48,28 @@ import cc.jaxy.anlobehub.core.designsystem.component.PasswordField
 import cc.jaxy.anlobehub.core.designsystem.theme.spacing
 import cc.jaxy.anlobehub.core.designsystem.R as DsR
 
-/**
- * Spec-driven credentials form. Mirrors web `ProviderConfig` field order:
- * key items → endpoint → Responses API switch → client-fetch switch →
- * AES-GCM note. OAuth providers render an unsupported placeholder.
- */
+/** Provider-specific local credential form; secret values are protected by Android Keystore. */
 @Composable
 fun ProviderConfigForm(
     detail: ProviderDetail,
     displayName: String,
     vaultValue: (String) -> String,
     draftAuthMode: String?,
-    draftFetchOnClient: Boolean?,
-    draftEnableResponseApi: Boolean?,
     onDraftChange: (key: String, value: String) -> Unit,
     onAuthModeChange: (String) -> Unit,
-    onFetchOnClientChange: (Boolean) -> Unit,
-    onEnableResponseApiChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val spec = remember(detail.id, detail.source) {
         providerConfigSpec(detail.id, detail.source)
     }
     val special = remember(detail.id) { specialFieldsFor(detail.id) }
+    val endpoint = remember(spec.endpoint, detail.endpointPlaceholder) {
+        val placeholder = detail.endpointPlaceholder?.takeIf(String::isNotBlank)
+        if (placeholder == null) spec.endpoint
+        else (spec.endpoint ?: EndpointField(placeholder)).copy(placeholder = placeholder)
+    }
+    val showApiKey = detail.showApiKey ?: spec.showApiKey
+    val oauthRequired = spec.isOAuth || detail.authType.equals("oauthDeviceFlow", ignoreCase = true)
     val spacing = MaterialTheme.spacing
 
     if (!spec.showConfig) {
@@ -91,7 +86,7 @@ fun ProviderConfigForm(
         }
         return
     }
-    if (spec.isOAuth) {
+    if (oauthRequired) {
         Column(
             modifier = modifier
                 .fillMaxWidth()
@@ -108,11 +103,6 @@ fun ProviderConfigForm(
 
     // Effective (draft > stored) values for visibility rules.
     fun effective(key: String): String = vaultValue(key)
-    val endpointValue = effective(VAULT_BASE_URL).ifBlank { effective(VAULT_ENDPOINT) }
-    val hasCredential = listOf(
-        VAULT_API_KEY, "accessKeyId", "secretAccessKey", "username",
-    ).any { effective(it).isNotBlank() } ||
-        (effective("username").isNotBlank() && effective("password").isNotBlank())
 
     Column(
         modifier = modifier
@@ -132,7 +122,7 @@ fun ProviderConfigForm(
                 onAuthModeChange = onAuthModeChange,
             )
         } else {
-            if (spec.showApiKey && spec.apiKey == ApiKeyField.SHOW_DEFAULT) {
+            if (showApiKey && spec.apiKey == ApiKeyField.SHOW_DEFAULT) {
                 PasswordField(
                     value = effective(VAULT_API_KEY),
                     onValueChange = { onDraftChange(VAULT_API_KEY, it) },
@@ -148,11 +138,11 @@ fun ProviderConfigForm(
                     },
                 )
             }
-            spec.endpoint?.let { endpoint ->
+            endpoint?.let { endpointField ->
                 EndpointInput(
                     detailId = detail.id,
                     value = effective(VAULT_BASE_URL),
-                    endpoint = endpoint,
+                    endpoint = endpointField,
                     onValueChange = { onDraftChange(VAULT_BASE_URL, it) },
                 )
             }
@@ -167,22 +157,6 @@ fun ProviderConfigForm(
             }
         }
 
-        if (spec.supportResponsesApi) {
-            SwitchRow(
-                title = stringResource(R.string.provider_cfg_responses_title),
-                desc = stringResource(R.string.provider_cfg_responses_desc),
-                checked = draftEnableResponseApi ?: detail.enableResponseApi ?: false,
-                onCheckedChange = onEnableResponseApiChange,
-            )
-        }
-        if (showClientFetchSwitch(spec, endpointValue, hasCredential)) {
-            SwitchRow(
-                title = stringResource(R.string.provider_cfg_fetch_title),
-                desc = stringResource(R.string.provider_cfg_fetch_desc),
-                checked = draftFetchOnClient ?: detail.fetchOnClient ?: false,
-                onCheckedChange = onFetchOnClientChange,
-            )
-        }
         Text(
             text = stringResource(R.string.provider_cfg_aesgcm),
             style = MaterialTheme.typography.bodySmall,
@@ -538,32 +512,6 @@ private fun VaultSelectInput(
     }
 }
 
-@Composable
-private fun SwitchRow(
-    title: String,
-    desc: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    androidx.compose.foundation.layout.Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(
-            MaterialTheme.spacing.m,
-        ),
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
-            Text(
-                desc,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
 
 /** Resolve a `SpecialField` label/placeholder/desc key to localized text. */
 @Composable

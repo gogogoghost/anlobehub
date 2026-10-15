@@ -1,28 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="settings_signout_title">退出登录</string>
-    <string name="settings_signout_text">确定要退出当前账号吗？退出后需要重新登录。</string>
-    <string name="settings_signout_subtitle">退出当前账号</string>
-    <string name="section_account">账号</string>
-    <string name="section_server">服务器</string>
-    <string name="section_content">内容</string>
-    <string name="section_actions">操作</string>
     <string name="section_appearance">外观</string>
-    <string name="server_address">服务器地址</string>
-    <string name="server_unset">未设置</string>
-    <string name="server_copied">已复制服务器地址</string>
-    <string name="kb_title">知识库</string>
     <string name="providers_title">供应商</string>
     <string name="providers_empty_title">暂无供应商</string>
     <string name="provider_models_empty_title">暂无模型</string>
-    <string name="browse">浏览</string>
+    <string name="providers_local_description">请求将从本机直接发送到你配置的供应商。</string>
+    <string name="provider_custom_add">添加自定义 OpenAI 兼容供应商</string>
+    <string name="provider_custom_title">添加自定义供应商</string>
+    <string name="provider_custom_name">供应商名称</string>
+    <string name="provider_custom_endpoint">API 地址</string>
+    <string name="provider_custom_endpoint_hint">https://api.example.com/v1</string>
+    <string name="provider_custom_direct_note">请求将从本机直接发送到此地址。</string>
+    <string name="provider_custom_create">创建</string>
     <string name="version_format">版本号 %1$s</string>
-    <string name="account_signed_out">未登录</string>
-    <string name="account_signed_in">已登录</string>
-    <string name="no_server">尚未设置服务器，请先配置服务器地址</string>
-    <string name="kb_empty_title">暂无知识库</string>
-    <string name="kb_untitled">未命名知识库</string>
-    <string name="kb_wip">知识库详情开发中</string>
     <string name="discovery_empty_desc">下拉刷新试试，或稍后再来看看</string>
     <string name="provider_detail_section_basic">基本信息</string>
     <string name="provider_detail_section_credentials">凭证</string>
@@ -59,16 +49,12 @@
     <string name="provider_detail_check_model_required">请先选择模型</string>
 
     <string name="provider_cfg_apikey_desc">请填写你的 %1$s API Key</string>
-    <string name="provider_cfg_baseurl_title">API 代理地址</string>
+    <string name="provider_cfg_baseurl_title">API 地址</string>
     <string name="provider_cfg_baseurl_desc">必须包含 http(s)://</string>
     <string name="provider_cfg_baseurl_invalid">请输入合法的 URL</string>
-    <string name="provider_cfg_fetch_title">使用客户端请求模式</string>
-    <string name="provider_cfg_fetch_desc">请求将从本机直接发起，可提升响应速度</string>
-    <string name="provider_cfg_responses_title">使用 Responses API 规范</string>
-    <string name="provider_cfg_responses_desc">采用新一代请求格式规范，解锁思维链等进阶特性（仅 OpenAI 模型支持）</string>
-    <string name="provider_cfg_aesgcm">你的密钥与代理地址等将使用 AES-GCM 加密算法进行加密</string>
-    <string name="provider_cfg_oauth_unsupported">该供应商使用 OAuth 设备流登录，应用暂不支持，请前往网页端配置。</string>
-    <string name="provider_cfg_noconfig">该供应商由服务端托管，无需配置。</string>
+    <string name="provider_cfg_aesgcm">敏感凭证使用 Android Keystore AES-GCM 加密，并排除在备份之外。</string>
+    <string name="provider_cfg_oauth_unsupported">此供应商需要 OAuth 设备流，应用暂不支持。</string>
+    <string name="provider_cfg_noconfig">应用中没有此供应商的额外配置项。</string>
     <string name="provider_cfg_azure_token_title">API Key</string>
     <string name="provider_cfg_azure_token_hint">Azure API Key</string>
     <string name="provider_cfg_azure_token_desc">从 Azure 门户检查资源时，可在“密钥和终结点”部分中找到此值。可以使用 KEY1 或 KEY2</string>
@@ -125,7 +111,7 @@
     <string name="provider_cfg_comfy_key_title">API 密钥</string>
     <string name="provider_cfg_comfy_key_hint">请输入 API 密钥</string>
     <string name="provider_cfg_comfy_key_desc">Bearer Token 认证所需的 API 密钥</string>
-    <string name="provider_cfg_comfy_custom_note">自定义请求头暂仅支持在网页端编辑。</string>
+    <string name="provider_cfg_comfy_custom_note">此应用暂不支持自定义请求头。</string>
     <string name="provider_cfg_github_pat_title">Github PAT</string>
     <string name="provider_cfg_github_pat_hint">ghp_xxxxxx</string>
     <string name="provider_cfg_github_pat_desc">填入你的 Github PAT</string>
@@ -143,6 +129,12 @@
     <string name="providers_search_empty">没有匹配的供应商</string>
     <string name="provider_models_search_hint">搜索模型</string>
     <string name="provider_models_search_empty">没有匹配的模型</string>
+    <string name="provider_id_chat_unavailable">%1$s · 尚未实现本地对话适配器</string>
+    <string name="provider_detail_chat_unsupported">已在本地收录供应商和模型目录，但应用尚未实现该供应商的直接对话适配器。</string>
+    <string name="provider_detail_models_count">内置模型：%1$d</string>
+    <string name="provider_detail_api_key_url">API 密钥页面</string>
+    <string name="provider_detail_models_url">模型文档</string>
+    <string name="provider_detail_website">供应商网站</string>
+    <string name="provider_model_no_chat_adapter">仅为目录条目；未实现本地对话适配器</string>
 
-    <string name="avatar_upload_failed">头像上传失败</string>
 </resources>

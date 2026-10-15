@@ -28,8 +28,7 @@ class AnlobehubApp : Application() {
     @Inject
     lateinit var uiPreferences: UiPreferencesStore
 
-    @Inject
-    lateinit var okHttpClient: OkHttpClient
+    private val imageHttpClient by lazy(LazyThreadSafetyMode.NONE) { OkHttpClient() }
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var foregroundActivity = WeakReference<Activity>(null)
@@ -37,10 +36,11 @@ class AnlobehubApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        removeLegacyAuthData()
         // Coil3 needs an explicit network fetcher for http(s) images.
         SingletonImageLoader.setSafe {
             ImageLoader.Builder(this)
-                .components { add(OkHttpNetworkFetcherFactory(okHttpClient)) }
+                .components { add(OkHttpNetworkFetcherFactory(imageHttpClient)) }
                 // Avatars/logos are tiny and URL-addressed (new URL = new
                 // image), so cache aggressively: 25% RAM + 100MB disk.
                 .memoryCache {
@@ -78,6 +78,21 @@ class AnlobehubApp : Application() {
                 .collect { language ->
                     applyLanguage(language)
                 }
+        }
+    }
+
+    private fun removeLegacyAuthData() {
+        val migration = getSharedPreferences("local_data_migrations", MODE_PRIVATE)
+        if (migration.getBoolean("legacy_auth_data_removed", false)) return
+        val obsoletePrefixes = listOf(
+            "server_prefs.preferences_pb",
+            "network_cookies.preferences_pb",
+            "user.preferences_pb",
+        )
+        val matchingFiles = filesDir.resolve("datastore").listFiles().orEmpty()
+            .filter { file -> obsoletePrefixes.any { prefix -> file.name.startsWith(prefix) } }
+        if (matchingFiles.all { !it.exists() || it.delete() }) {
+            migration.edit().putBoolean("legacy_auth_data_removed", true).apply()
         }
     }
 

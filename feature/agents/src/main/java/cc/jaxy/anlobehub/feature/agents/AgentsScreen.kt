@@ -216,10 +216,6 @@ private fun AgentRow(
 ) {
     val view = LocalView.current
     val name = agent.displayName() ?: stringResource(R.string.agents_untitled)
-    val subtitle = when {
-        agent.isInbox -> stringResource(R.string.agents_inbox_subtitle)
-        else -> null
-    }
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -231,16 +227,7 @@ private fun AgentRow(
         modifier = modifier.fillMaxWidth(),
     ) {
         ListItem(
-            headlineContent = {
-                if (agent.isInbox) {
-                    Text("$name · ${stringResource(R.string.agents_inbox_badge)}")
-                } else {
-                    Text(name)
-                }
-            },
-            supportingContent = {
-                if (subtitle != null) Text(subtitle)
-            },
+            headlineContent = { Text(name) },
             leadingContent = { InitialAvatar(name = name, avatarUrl = agent.avatar) },
             trailingContent = {
                 if (busy) {
@@ -262,7 +249,6 @@ private fun AgentRow(
 }
 
 private val previewAgents = listOf(
-    Agent(id = "inbox", name = "Lobe AI", description = null, avatar = null, isInbox = true),
     Agent(id = "a1", name = "Translator", description = "Translate anything", avatar = null),
     Agent(id = "a2", name = null, title = "Draft", description = "Draft agent", avatar = null),
 )

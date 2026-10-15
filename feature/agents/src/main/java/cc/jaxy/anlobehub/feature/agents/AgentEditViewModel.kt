@@ -6,7 +6,6 @@ import cc.jaxy.anlobehub.core.common.result.AnResult
 import cc.jaxy.anlobehub.core.data.agent.AgentRepository
 import cc.jaxy.anlobehub.core.data.chat.AIModel
 import cc.jaxy.anlobehub.core.data.files.FileRepository
-import cc.jaxy.anlobehub.core.data.session.ServerStore
 import cc.jaxy.anlobehub.core.designsystem.text.UiText
 import cc.jaxy.anlobehub.core.designsystem.text.toUiText
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -14,19 +13,17 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 
 /**
  * Create/edit agent page state. `agentId == null` creates; otherwise edits.
- * Mirrors web `CreateAgentSchema` fields: avatar/title/description/model/
- * provider/systemRole/openingMessage/openingQuestions.
+ * Local agent configuration fields: avatar/title/description/model/provider/
+ * systemRole/openingMessage/openingQuestions.
  */
 @HiltViewModel
 class AgentEditViewModel @Inject constructor(
-    private val serverStore: ServerStore,
     private val agentRepository: AgentRepository,
     private val fileRepository: FileRepository,
 ) : ViewModel() {
@@ -75,15 +72,7 @@ class AgentEditViewModel @Inject constructor(
         val id = _uiState.value.agentId ?: return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(loading = true, error = null)
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
-            if (baseUrl.isNullOrBlank()) {
-                _uiState.value = _uiState.value.copy(
-                    loading = false,
-                    error = UiText.Res(R.string.agents_no_server),
-                )
-                return@launch
-            }
-            when (val result = agentRepository.getConfig(baseUrl, id)) {
+            when (val result = agentRepository.getConfig(id)) {
                 is AnResult.Ok -> {
                     val c = result.value
                     _uiState.value = _uiState.value.copy(
@@ -167,20 +156,11 @@ class AgentEditViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(saving = true, error = null, saved = false)
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
-            if (baseUrl.isNullOrBlank()) {
-                _uiState.value = _uiState.value.copy(
-                    saving = false,
-                    error = UiText.Res(R.string.agents_no_server),
-                )
-                return@launch
-            }
             val cur = _uiState.value
             val questions = cur.openingQuestions.filter { it.isNotBlank() }
             if (cur.agentId == null) {
                 when (
                     val result = agentRepository.create(
-                        baseUrl = baseUrl,
                         title = cur.title.trim(),
                         systemRole = cur.systemRole.trim().takeIf { it.isNotBlank() },
                         model = cur.model.trim().takeIf { it.isNotBlank() },
@@ -212,10 +192,10 @@ class AgentEditViewModel @Inject constructor(
                     "openingQuestions",
                     buildJsonArray { questions.forEach { add(JsonPrimitive(it)) } },
                 )
-                if (cur.model.isNotBlank()) put("model", JsonPrimitive(cur.model.trim()))
-                if (cur.provider.isNotBlank()) put("provider", JsonPrimitive(cur.provider.trim()))
+                put("model", JsonPrimitive(cur.model.trim()))
+                put("provider", JsonPrimitive(cur.provider.trim()))
             }
-            when (val result = agentRepository.updateConfig(baseUrl, cur.agentId, fields)) {
+            when (val result = agentRepository.updateConfig(cur.agentId, fields)) {
                 is AnResult.Ok -> _uiState.value = _uiState.value.copy(saving = false, saved = true)
                 is AnResult.Err -> _uiState.value = _uiState.value.copy(
                     saving = false,
@@ -227,25 +207,10 @@ class AgentEditViewModel @Inject constructor(
 
     fun delete() {
         val id = _uiState.value.agentId ?: return
-        if (id == "inbox" || _uiState.value.deleting) {
-            if (id == "inbox") {
-                _uiState.value = _uiState.value.copy(
-                    error = UiText.Res(R.string.agents_inbox_delete_error),
-                )
-            }
-            return
-        }
+        if (_uiState.value.deleting) return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(deleting = true, error = null)
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
-            if (baseUrl.isNullOrBlank()) {
-                _uiState.value = _uiState.value.copy(
-                    deleting = false,
-                    error = UiText.Res(R.string.agents_no_server),
-                )
-                return@launch
-            }
-            when (val result = agentRepository.remove(baseUrl, id)) {
+            when (val result = agentRepository.remove(id)) {
                 is AnResult.Ok -> _uiState.value = _uiState.value.copy(deleting = false, deleted = true)
                 is AnResult.Err -> _uiState.value = _uiState.value.copy(
                     deleting = false,
@@ -255,22 +220,13 @@ class AgentEditViewModel @Inject constructor(
         }
     }
 
-    /** Upload a prepared avatar image; the returned URL becomes the avatar. */
+    /** Saves a prepared avatar image to local storage. */
     fun uploadAvatar(bytes: ByteArray, mime: String) {
         if (_uiState.value.uploading) return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(uploading = true, error = null)
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
-            if (baseUrl.isNullOrBlank()) {
-                _uiState.value = _uiState.value.copy(
-                    uploading = false,
-                    error = UiText.Res(R.string.agents_no_server),
-                )
-                return@launch
-            }
             when (
                 val result = fileRepository.uploadFile(
-                    baseUrl = baseUrl,
                     name = "avatar.webp",
                     mime = mime,
                     bytes = bytes,
@@ -298,12 +254,7 @@ class AgentEditViewModel @Inject constructor(
     fun duplicate(onDone: (String) -> Unit) {
         val id = _uiState.value.agentId ?: return
         viewModelScope.launch {
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
-            if (baseUrl.isNullOrBlank()) {
-                _uiState.value = _uiState.value.copy(error = UiText.Res(R.string.agents_no_server))
-                return@launch
-            }
-            when (val result = agentRepository.duplicate(baseUrl, id)) {
+            when (val result = agentRepository.duplicate(id)) {
                 is AnResult.Ok -> onDone(result.value)
                 is AnResult.Err -> _uiState.value = _uiState.value.copy(
                     error = result.error.toUiText(),

@@ -1,11 +1,8 @@
 package cc.jaxy.anlobehub.core.common.util
 
 /**
- * Detail-page field overrides mirroring web
- * `src/features/Settings/provider/detail/{azure,azureai,bedrock,cloudflare,comfyui,github,vertexai}/index.tsx`.
- *
- * Labels/descriptions intentionally stay as stable keys — the settings UI
- * resolves them to localized strings (see `ProviderSpecialStrings`).
+ * Local provider-form overrides for built-in provider metadata.
+ * Labels and descriptions are resolved by the settings UI from localized resources.
  */
 
 /** String-keyed field so UI can localize without touching the spec. */
@@ -27,8 +24,7 @@ data class SpecialAuthMode(
 /**
  * Extra/replacement fields for one provider.
  *
- * @param replacesApiKey When true the default API key field is dropped and
- *   [apiKeyItems] render in its place (web `apiKeyItems` prop).
+ * @param replacesApiKey When true, [apiKeyItems] replace the default API key field.
  * @param endpoint Falls back to the card spec endpoint when null.
  */
 data class SpecialFields(
@@ -163,8 +159,7 @@ private val SPECIAL_FIELDS: Map<String, SpecialFields> = mapOf(
                 id = "bearer", labelKey = "comfyui.authType.options.bearer",
                 fields = listOf(secret(VAULT_API_KEY, "comfyui.apiKey")),
             ),
-            // `custom` headers use a key-value editor on web; native v1 keeps
-            // the selector + note and lets power users JSON-edit via endpoint.
+            // Custom header authentication is not implemented by this local form.
             SpecialAuthMode(id = "custom", labelKey = "comfyui.authType.options.custom", fields = emptyList()),
         ),
         apiKeyItems = listOf(text(VAULT_BASE_URL, "comfyui.baseURL")),
@@ -192,9 +187,7 @@ private val SPECIAL_FIELDS: Map<String, SpecialFields> = mapOf(
 fun specialFieldsFor(providerId: String): SpecialFields? =
     SPECIAL_FIELDS[providerId.lowercase()]
 
-/**
- * Mirror of web `inferBedrockAuthMode`: credentials win over a bare API key.
- */
+/** Selects AWS credentials when access-key fields are configured. */
 fun inferBedrockAuthMode(vaults: Map<String, String?>): String {
     val hasAws = !vaults[VAULT_ACCESS_KEY_ID].isNullOrBlank() ||
         !vaults[VAULT_SECRET_ACCESS_KEY].isNullOrBlank()

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- 自部署用户常用内网 http 地址，允许明文流量 -->
+    <!-- Direct provider APIs and user-configured LAN/local inference endpoints. -->
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />

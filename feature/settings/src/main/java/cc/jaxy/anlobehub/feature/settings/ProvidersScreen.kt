@@ -11,6 +11,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -40,7 +44,6 @@ import androidx.lifecycle.viewModelScope
 import cc.jaxy.anlobehub.core.common.result.AnResult
 import cc.jaxy.anlobehub.core.data.provider.AiProvider
 import cc.jaxy.anlobehub.core.data.provider.ProviderRepository
-import cc.jaxy.anlobehub.core.data.session.ServerStore
 import cc.jaxy.anlobehub.core.designsystem.component.AnTopBar
 import cc.jaxy.anlobehub.core.designsystem.component.EmptyBox
 import cc.jaxy.anlobehub.core.designsystem.component.ErrorBox
@@ -58,12 +61,10 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @HiltViewModel
 internal class ProvidersViewModel @Inject constructor(
-    private val serverStore: ServerStore,
     private val providerRepository: ProviderRepository,
 ) : ViewModel() {
 
@@ -86,12 +87,7 @@ internal class ProvidersViewModel @Inject constructor(
     fun load() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(loading = true, error = null)
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
-            if (baseUrl.isNullOrBlank()) {
-                _uiState.value = UiState(loading = false, error = UiText.Res(R.string.no_server))
-                return@launch
-            }
-            when (val result = providerRepository.listProviders(baseUrl)) {
+            when (val result = providerRepository.listProviders()) {
                 is AnResult.Ok -> _uiState.value = UiState(loading = false, providers = result.value)
                 is AnResult.Err -> _uiState.value = _uiState.value.copy(
                     loading = false,
@@ -109,22 +105,23 @@ internal class ProvidersViewModel @Inject constructor(
         viewModelScope.launch {
             val current = _uiState.value.providers
             _uiState.value = _uiState.value.copy(
-                providers = current.map {
-                    if (it.id == provider.id) it.copy(enabled = enabled) else it
-                },
+                providers = current.map { if (it.id == provider.id) it.copy(enabled = enabled) else it },
             )
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
-            if (baseUrl.isNullOrBlank()) {
-                _uiState.value = _uiState.value.copy(providers = current)
-                _errorEvent.value = UiText.Res(R.string.no_server)
-                return@launch
-            }
-            when (val result = providerRepository.toggleProvider(baseUrl, provider.id, enabled)) {
+            when (val result = providerRepository.toggleProvider(provider.id, enabled)) {
                 is AnResult.Ok -> Unit
                 is AnResult.Err -> {
                     _uiState.value = _uiState.value.copy(providers = current)
                     _errorEvent.value = result.error.toUiText()
                 }
+            }
+        }
+    }
+
+    fun createCustom(name: String, endpoint: String) {
+        viewModelScope.launch {
+            when (val result = providerRepository.createCustom(name, endpoint)) {
+                is AnResult.Ok -> load()
+                is AnResult.Err -> _errorEvent.value = result.error.toUiText()
             }
         }
     }
@@ -158,6 +155,47 @@ private fun ProvidersContent(
             viewModel.consumeToggleError()
         }
     }
+    var showCreateDialog by rememberSaveable { mutableStateOf(false) }
+    if (showCreateDialog) {
+        var name by rememberSaveable { mutableStateOf("") }
+        var endpoint by rememberSaveable { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showCreateDialog = false },
+            title = { Text(stringResource(R.string.provider_custom_title)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.provider_custom_direct_note))
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text(stringResource(R.string.provider_custom_name)) },
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        value = endpoint,
+                        onValueChange = { endpoint = it },
+                        label = { Text(stringResource(R.string.provider_custom_endpoint)) },
+                        placeholder = { Text(stringResource(R.string.provider_custom_endpoint_hint)) },
+                        singleLine = true,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = name.isNotBlank() && endpoint.isNotBlank(),
+                    onClick = {
+                        viewModel.createCustom(name.trim(), endpoint.trim())
+                        showCreateDialog = false
+                    },
+                ) { Text(stringResource(R.string.provider_custom_create)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateDialog = false }) {
+                    Text(stringResource(cc.jaxy.anlobehub.core.designsystem.R.string.common_cancel))
+                }
+            },
+        )
+    }
     Scaffold(
         topBar = { AnTopBar(title = stringResource(R.string.providers_title), onBack = onBack) },
         snackbarHost = { SnackbarHost(snackbar) },
@@ -180,6 +218,7 @@ private fun ProvidersContent(
                     onConfigClick = onConfigClick,
                     onToggle = { provider, enabled -> viewModel.toggle(provider, enabled) },
                     modifier = Modifier.fillMaxSize().padding(padding),
+                    onCreateClick = { showCreateDialog = true },
                 )
         }
     }
@@ -193,6 +232,7 @@ private fun ProvidersBody(
     onProviderClick: (id: String, name: String) -> Unit,
     onConfigClick: (id: String, name: String?) -> Unit,
     onToggle: (AiProvider, Boolean) -> Unit,
+    onCreateClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val spacing = MaterialTheme.spacing
@@ -205,6 +245,10 @@ private fun ProvidersBody(
         }
     }
     Column(modifier = modifier) {
+        Button(
+            onClick = onCreateClick,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = spacing.l, vertical = spacing.s),
+        ) { Text(stringResource(R.string.provider_custom_add)) }
         SearchField(
             query = query,
             onQueryChange = { query = it },
@@ -271,7 +315,11 @@ private fun ProviderRow(
             },
             supportingContent = {
                 Text(
-                    text = provider.id,
+                    text = if (provider.chatSupported) {
+                        provider.id
+                    } else {
+                        stringResource(R.string.provider_id_chat_unavailable, provider.id)
+                    },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

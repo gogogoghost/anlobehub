@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Psychology
@@ -47,10 +46,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -61,21 +59,12 @@ import cc.jaxy.anlobehub.core.common.result.AnResult
 import cc.jaxy.anlobehub.core.data.provider.CheckResult
 import cc.jaxy.anlobehub.core.data.provider.ProviderDetail
 import cc.jaxy.anlobehub.core.data.provider.ProviderRepository
-import cc.jaxy.anlobehub.core.data.session.ServerStore
-import cc.jaxy.anlobehub.core.designsystem.component.AnTextField
-import cc.jaxy.anlobehub.core.common.util.ApiKeyField
-import cc.jaxy.anlobehub.core.common.util.FieldType
 import cc.jaxy.anlobehub.core.common.util.VAULT_API_KEY
-import cc.jaxy.anlobehub.core.common.util.VAULT_AUTH_TYPE
 import cc.jaxy.anlobehub.core.common.util.VAULT_BASE_URL
-import cc.jaxy.anlobehub.core.common.util.inferBedrockAuthMode
 import cc.jaxy.anlobehub.core.common.util.providerConfigSpec
-import cc.jaxy.anlobehub.core.common.util.showClientFetchSwitch
-import cc.jaxy.anlobehub.core.common.util.specialFieldsFor
 import cc.jaxy.anlobehub.core.designsystem.component.AnTopBar
 import cc.jaxy.anlobehub.core.designsystem.component.ErrorBox
 import cc.jaxy.anlobehub.core.designsystem.component.ProviderIcon
-import cc.jaxy.anlobehub.core.designsystem.component.PasswordField
 import cc.jaxy.anlobehub.core.designsystem.component.SectionTitle
 import cc.jaxy.anlobehub.core.designsystem.component.SettingRow
 import cc.jaxy.anlobehub.core.designsystem.component.SkeletonList
@@ -89,12 +78,10 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @HiltViewModel
 class ProviderDetailViewModel @Inject constructor(
-    private val serverStore: ServerStore,
     private val providerRepository: ProviderRepository,
 ) : ViewModel() {
 
@@ -106,8 +93,6 @@ class ProviderDetailViewModel @Inject constructor(
         /** Edited keyVaults values; absent key = unchanged. */
         val draftVaults: Map<String, String> = emptyMap(),
         val draftAuthMode: String? = null,
-        val draftFetchOnClient: Boolean? = null,
-        val draftEnableResponseApi: Boolean? = null,
         val checking: Boolean = false,
         val checkResult: CheckResult? = null,
         val checkModelOverride: String? = null,
@@ -134,12 +119,7 @@ class ProviderDetailViewModel @Inject constructor(
             val id = providerId
             if (id.isBlank()) return@launch
             _uiState.value = _uiState.value.copy(loading = true, error = null)
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
-            if (baseUrl.isNullOrBlank()) {
-                _uiState.value = UiState(loading = false, error = UiText.Res(R.string.no_server))
-                return@launch
-            }
-            when (val result = providerRepository.getDetail(baseUrl, id)) {
+            when (val result = providerRepository.getDetail(id)) {
                 is AnResult.Ok -> _uiState.value = UiState(loading = false, detail = result.value)
                 is AnResult.Err -> _uiState.value = _uiState.value.copy(
                     loading = false,
@@ -163,18 +143,11 @@ class ProviderDetailViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(draftAuthMode = mode)
     }
 
-    fun updateFetchOnClient(enabled: Boolean) {
-        _uiState.value = _uiState.value.copy(draftFetchOnClient = enabled)
-    }
-
-    fun updateEnableResponseApi(enabled: Boolean) {
-        _uiState.value = _uiState.value.copy(draftEnableResponseApi = enabled)
-    }
 
     /** Saves the draft (TopBar action on the credentials sub-page). */
     fun saveFromDraft() {
         val s = _uiState.value
-        save(s.draftVaults, s.draftFetchOnClient, s.draftEnableResponseApi)
+        save(s.draftVaults)
     }
 
     /** Effective vault value: draft wins, stored second. */
@@ -182,42 +155,23 @@ class ProviderDetailViewModel @Inject constructor(
         _uiState.value.draftVaults[key]
             ?: _uiState.value.detail?.keyVaults?.get(key).orEmpty()
 
-    private fun save(
-        draftVaults: Map<String, String>,
-        fetchOnClient: Boolean?,
-        enableResponseApi: Boolean?,
-    ) {
+    private fun save(draftVaults: Map<String, String>) {
         viewModelScope.launch {
             val id = providerId
             val detail = _uiState.value.detail
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
-            if (baseUrl.isNullOrBlank()) {
-                _event.value = UiText.Res(R.string.no_server)
-                return@launch
-            }
             _uiState.value = _uiState.value.copy(saving = true)
             // Only send changed values; a blanked credential means clear.
             val vaults = draftVaults.filter { (k, v) ->
                 v != (detail?.keyVaults?.get(k).orEmpty())
             }
             when (
-                val result = providerRepository.updateConfig(
-                    baseUrl = baseUrl,
-                    id = id,
-                    keyVaults = vaults,
-                    fetchOnClient = fetchOnClient
-                        ?.takeIf { it != detail?.fetchOnClient },
-                    enableResponseApi = enableResponseApi
-                        ?.takeIf { it != detail?.enableResponseApi },
-                )
+                val result = providerRepository.updateConfig(id = id, keyVaults = vaults)
             ) {
                 is AnResult.Ok -> {
                     _uiState.value = _uiState.value.copy(
                         saving = false,
                         draftVaults = emptyMap(),
                         draftAuthMode = null,
-                        draftFetchOnClient = null,
-                        draftEnableResponseApi = null,
                     )
                     _event.value = UiText.Res(R.string.provider_detail_saved)
                     load()
@@ -233,11 +187,6 @@ class ProviderDetailViewModel @Inject constructor(
     fun check() {
         viewModelScope.launch {
             val id = providerId
-            val baseUrl = runCatching { serverStore.baseUrl.first() }.getOrNull()
-            if (baseUrl.isNullOrBlank()) {
-                _event.value = UiText.Res(R.string.no_server)
-                return@launch
-            }
             _uiState.value = _uiState.value.copy(checking = true, checkResult = null)
             val model = _uiState.value.checkModelOverride
                 ?.takeIf { it.isNotBlank() }
@@ -247,7 +196,7 @@ class ProviderDetailViewModel @Inject constructor(
                 _event.value = UiText.Res(R.string.provider_detail_check_model_required)
                 return@launch
             }
-            when (val result = providerRepository.checkConnectivity(baseUrl, id, model)) {
+            when (val result = providerRepository.checkConnectivity(id, model)) {
                 is AnResult.Ok -> _uiState.value = _uiState.value.copy(
                     checking = false,
                     checkResult = result.value,
@@ -276,15 +225,18 @@ class ProviderDetailViewModel @Inject constructor(
                 _event.value = UiText.Res(R.string.provider_detail_baseurl_required)
                 return@launch
             }
-            // Prefer the draft; fall back to the stored key (server returns
-            // the real value for full-access sessions).
+            // The local vault provides stored credentials; a draft takes precedence.
             val apiKey = vaultValue(VAULT_API_KEY)
-            if (apiKey.isBlank()) {
+            val detail = _uiState.value.detail
+            val requiresApiKey = detail?.let {
+                it.source != "custom" && providerConfigSpec(it.id, it.source).showApiKey
+            } ?: true
+            if (requiresApiKey && apiKey.isBlank()) {
                 _event.value = UiText.Res(R.string.provider_detail_apikey_required)
                 return@launch
             }
             _uiState.value = _uiState.value.copy(fetching = true, remoteModels = null)
-            when (val result = providerRepository.fetchRemoteModels(baseURL, apiKey)) {
+            when (val result = providerRepository.fetchRemoteModels(providerId, baseURL, apiKey)) {
                 is AnResult.Ok -> _uiState.value = _uiState.value.copy(
                     fetching = false,
                     remoteModels = result.value,
@@ -356,7 +308,9 @@ private fun ProviderDetailContent(
                     val spec = detail?.let {
                         providerConfigSpec(it.id, it.source)
                     }
-                    val editable = spec != null && spec.showConfig && !spec.isOAuth
+                    val oauthRequired = spec?.isOAuth == true ||
+                        detail?.authType.equals("oauthDeviceFlow", ignoreCase = true)
+                    val editable = spec != null && spec.showConfig && !oauthRequired
                     if (showCredentials && editable) {
                         TextButton(
                             onClick = { viewModel.saveFromDraft() },
@@ -396,13 +350,9 @@ private fun ProviderDetailContent(
                     showCredentials = showCredentials,
                     draftVaults = uiState.draftVaults,
                     draftAuthMode = uiState.draftAuthMode,
-                    draftFetchOnClient = uiState.draftFetchOnClient,
-                    draftEnableResponseApi = uiState.draftEnableResponseApi,
                     onOpenCredentials = { showCredentials = true },
                     onDraftChange = viewModel::updateDraft,
                     onAuthModeChange = viewModel::updateAuthMode,
-                    onFetchOnClientChange = viewModel::updateFetchOnClient,
-                    onEnableResponseApiChange = viewModel::updateEnableResponseApi,
                     onCheck = { viewModel.check() },
                     onFetch = { viewModel.fetchRemoteModels() },
                     onModelsClick = {
@@ -429,13 +379,9 @@ private fun ProviderDetailBody(
     showCredentials: Boolean,
     draftVaults: Map<String, String>,
     draftAuthMode: String?,
-    draftFetchOnClient: Boolean?,
-    draftEnableResponseApi: Boolean?,
     onOpenCredentials: () -> Unit,
     onDraftChange: (key: String, value: String) -> Unit,
     onAuthModeChange: (String) -> Unit,
-    onFetchOnClientChange: (Boolean) -> Unit,
-    onEnableResponseApiChange: (Boolean) -> Unit,
     onCheck: () -> Unit,
     onFetch: () -> Unit,
     onModelsClick: () -> Unit = {},
@@ -446,6 +392,9 @@ private fun ProviderDetailBody(
     val spec = remember(detail.id, detail.source) {
         providerConfigSpec(detail.id, detail.source)
     }
+    val uriHandler = LocalUriHandler.current
+    val showConnectivity = detail.chatSupported && detail.showChecker && spec.showChecker
+    val showModelFetcher = detail.chatSupported && detail.showModelFetcher
     fun vaultValue(key: String): String =
         draftVaults[key] ?: detail.keyVaults[key].orEmpty()
     val configured = vaultValue(VAULT_API_KEY).isNotBlank() ||
@@ -468,7 +417,26 @@ private fun ProviderDetailBody(
             Column {
                 ListItem(
                     headlineContent = { Text(detail.name?.takeIf { it.isNotBlank() } ?: detail.id) },
-                    supportingContent = { Text(detail.id) },
+                    supportingContent = {
+                        Column {
+                            Text(detail.id)
+                            detail.description?.takeIf(String::isNotBlank)?.let {
+                                Text(
+                                    text = it,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                            if (!detail.chatSupported) {
+                                Text(
+                                    text = stringResource(R.string.provider_detail_chat_unsupported),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                        }
+                    },
                     leadingContent = {
                         ProviderIcon(providerId = detail.id, name = detail.name ?: detail.id, logoUrl = detail.logo, size = 40.dp)
                     },
@@ -478,10 +446,41 @@ private fun ProviderDetailBody(
                 SettingRow(
                     icon = Icons.Filled.SmartToy,
                     title = stringResource(R.string.provider_detail_models),
-                    subtitle = stringResource(R.string.provider_detail_models_desc),
+                    subtitle = if (detail.modelCount > 0) {
+                        stringResource(R.string.provider_detail_models_count, detail.modelCount)
+                    } else {
+                        stringResource(R.string.provider_detail_models_desc)
+                    },
                     onClick = onModelsClick,
                 )
-            }
+                detail.websiteUrl?.takeIf(String::isNotBlank)?.let { url ->
+                    HorizontalDivider()
+                    SettingRow(
+                        icon = Icons.Filled.Info,
+                        title = stringResource(R.string.provider_detail_website),
+                        subtitle = url,
+                        onClick = { runCatching { uriHandler.openUri(url) } },
+                    )
+                }
+                detail.apiKeyUrl?.takeIf(String::isNotBlank)?.let { url ->
+                    HorizontalDivider()
+                    SettingRow(
+                        icon = Icons.Filled.Key,
+                        title = stringResource(R.string.provider_detail_api_key_url),
+                        subtitle = url,
+                        onClick = { runCatching { uriHandler.openUri(url) } },
+                    )
+                }
+                detail.modelsUrl?.takeIf(String::isNotBlank)?.let { url ->
+                    HorizontalDivider()
+                    SettingRow(
+                        icon = Icons.Filled.Info,
+                        title = stringResource(R.string.provider_detail_models_url),
+                        subtitle = url,
+                        onClick = { runCatching { uriHandler.openUri(url) } },
+                    )
+                }
+        }
         }
         if (spec.showConfig) {
             item(key = "credentials-title") {
@@ -499,64 +498,69 @@ private fun ProviderDetailBody(
                     onClick = onOpenCredentials,
                 )
             }
-            item(key = "connectivity-title") {
-                SectionTitle(text = stringResource(R.string.provider_detail_section_connectivity))
-            }
-            item(key = "connectivity-card") {
-                Column {
-                        SettingRow(
-                            icon = Icons.Filled.Psychology,
-                            title = stringResource(R.string.provider_detail_check_model),
-                            subtitle = checkModel
-                                ?: stringResource(R.string.provider_detail_no_check_model),
-                            onClick = onPickCheckModel,
-                        )
-                        HorizontalDivider()
-                        SettingRow(
-                            icon = Icons.Filled.NetworkCheck,
-                            title = stringResource(R.string.provider_detail_check),
-                            subtitle = when {
-                                checking -> stringResource(R.string.provider_detail_checking)
-                                checkResult == null -> null
-                                checkResult.ok -> stringResource(R.string.provider_detail_check_ok)
-                                else -> checkResult.error?.takeIf { it.isNotBlank() }
-                                    ?: stringResource(R.string.provider_detail_check_failed)
-                            },
-                            onClick = onCheck,
-                            trailing = {
-                                when {
-                                    checking -> CircularProgressIndicator(modifier = Modifier.size(24.dp))
+            if (showConnectivity || showModelFetcher) {
+                item(key = "connectivity-title") {
+                    SectionTitle(text = stringResource(R.string.provider_detail_section_connectivity))
+                }
+                item(key = "connectivity-card") {
+                    Column {
+                        if (showConnectivity) {
+                            SettingRow(
+                                icon = Icons.Filled.Psychology,
+                                title = stringResource(R.string.provider_detail_check_model),
+                                subtitle = checkModel ?: stringResource(R.string.provider_detail_no_check_model),
+                                onClick = onPickCheckModel,
+                            )
+                            HorizontalDivider()
+                            SettingRow(
+                                icon = Icons.Filled.NetworkCheck,
+                                title = stringResource(R.string.provider_detail_check),
+                                subtitle = when {
+                                    checking -> stringResource(R.string.provider_detail_checking)
                                     checkResult == null -> null
-                                    checkResult.ok -> Icon(
-                                        imageVector = Icons.Filled.CheckCircle,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                    )
-                                    else -> Icon(
-                                        imageVector = Icons.Filled.ErrorOutline,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.error,
-                                    )
-                                }
-                            },
-                        )
-                        HorizontalDivider()
-                        SettingRow(
-                            icon = Icons.Filled.CloudDownload,
-                            title = stringResource(R.string.provider_detail_fetch),
-                            subtitle = fetchedCount?.let {
-                                stringResource(R.string.provider_detail_remote_count, it)
-                            },
-                            onClick = onFetch,
-                            trailing = {
-                                if (fetching) {
-                                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                                }
-                            },
-                    )
+                                    checkResult.ok -> stringResource(R.string.provider_detail_check_ok)
+                                    else -> checkResult.error?.takeIf(String::isNotBlank)
+                                        ?: stringResource(R.string.provider_detail_check_failed)
+                                },
+                                onClick = onCheck,
+                                trailing = {
+                                    when {
+                                        checking -> CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                        checkResult == null -> null
+                                        checkResult.ok -> Icon(
+                                            imageVector = Icons.Filled.CheckCircle,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                        else -> Icon(
+                                            imageVector = Icons.Filled.ErrorOutline,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                },
+                            )
+                            if (showModelFetcher) HorizontalDivider()
+                        }
+                        if (showModelFetcher) {
+                            SettingRow(
+                                icon = Icons.Filled.CloudDownload,
+                                title = stringResource(R.string.provider_detail_fetch),
+                                subtitle = fetchedCount?.let {
+                                    stringResource(R.string.provider_detail_remote_count, it)
+                                },
+                                onClick = onFetch,
+                                trailing = {
+                                    if (fetching) {
+                                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                    }
+                                },
+                            )
+                        }
+                    }
                 }
             }
-            if (remoteModels != null) {
+            if (remoteModels != null && detail.chatSupported) {
                 item(key = "remote-title") {
                     SectionTitle(text = stringResource(R.string.provider_detail_section_remote_models))
                 }
@@ -600,12 +604,8 @@ private fun ProviderDetailBody(
                 ?: detail.id,
             vaultValue = ::vaultValue,
             draftAuthMode = draftAuthMode,
-            draftFetchOnClient = draftFetchOnClient,
-            draftEnableResponseApi = draftEnableResponseApi,
             onDraftChange = onDraftChange,
             onAuthModeChange = onAuthModeChange,
-            onFetchOnClientChange = onFetchOnClientChange,
-            onEnableResponseApiChange = onEnableResponseApiChange,
             modifier = modifier,
         )
     }

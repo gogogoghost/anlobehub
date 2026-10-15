@@ -6,7 +6,6 @@ import androidx.lifecycle.viewModelScope
 import cc.jaxy.anlobehub.core.common.result.AnResult
 import cc.jaxy.anlobehub.core.data.chat.ChatTopic
 import cc.jaxy.anlobehub.core.data.chat.TopicRepository
-import cc.jaxy.anlobehub.core.data.session.ServerStore
 import cc.jaxy.anlobehub.core.designsystem.text.UiText
 import cc.jaxy.anlobehub.core.designsystem.text.toUiText
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -14,13 +13,11 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @HiltViewModel
 class TopicHistoryViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    private val serverStore: ServerStore,
     private val topicRepository: TopicRepository,
 ) : ViewModel() {
 
@@ -37,7 +34,7 @@ class TopicHistoryViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
-    // Server `current` is 0-based.
+    // The local repository uses zero-based paging.
     private var page = 0
 
     init {
@@ -64,35 +61,21 @@ class TopicHistoryViewModel @Inject constructor(
 
     fun deleteTopic(id: String) {
         viewModelScope.launch {
-            val baseUrl = currentBaseUrl() ?: return@launch
-            // Optimistic removal; failure restores via refresh.
             val kept = _uiState.value.topics
-            _uiState.value = _uiState.value.copy(
-                topics = kept.filterNot { it.id == id },
-            )
-            when (topicRepository.deleteTopic(baseUrl, id)) {
+            _uiState.value = _uiState.value.copy(topics = kept.filterNot { it.id == id })
+            when (val result = topicRepository.deleteTopic(id)) {
                 is AnResult.Ok -> Unit
-                is AnResult.Err -> {
-                    _uiState.value = _uiState.value.copy(topics = kept)
-                    refresh()
-                }
+                is AnResult.Err -> _uiState.value = _uiState.value.copy(
+                    topics = kept,
+                    error = result.error.toUiText(),
+                )
             }
         }
     }
 
     private suspend fun loadPage(page: Int, initial: Boolean) {
-        val baseUrl = currentBaseUrl()
-        if (baseUrl == null) {
-            _uiState.value = _uiState.value.copy(
-                loading = false,
-                loadingMore = false,
-                error = UiText.Res(R.string.chat_no_server),
-            )
-            return
-        }
         when (
             val result = topicRepository.pageTopics(
-                baseUrl = baseUrl,
                 page = page,
                 pageSize = PAGE_SIZE,
                 agentId = agentId.takeIf { it.isNotBlank() },
@@ -102,14 +85,13 @@ class TopicHistoryViewModel @Inject constructor(
                 val items = result.value.items
                 val total = result.value.total
                 val merged = if (initial) items else _uiState.value.topics + items
-                val end = items.size < PAGE_SIZE ||
-                    (total != null && merged.size >= total)
                 this.page = page
                 _uiState.value = _uiState.value.copy(
                     topics = merged,
                     loading = false,
                     loadingMore = false,
-                    endReached = end,
+                    endReached = items.size < PAGE_SIZE ||
+                        (total != null && merged.size >= total),
                     error = null,
                 )
             }
@@ -121,10 +103,5 @@ class TopicHistoryViewModel @Inject constructor(
         }
     }
 
-    private suspend fun currentBaseUrl(): String? =
-        runCatching { serverStore.baseUrl.first() }.getOrNull()?.takeIf { it.isNotBlank() }
-
-    companion object {
-        const val PAGE_SIZE = 20
-    }
+    private companion object { const val PAGE_SIZE = 50 }
 }

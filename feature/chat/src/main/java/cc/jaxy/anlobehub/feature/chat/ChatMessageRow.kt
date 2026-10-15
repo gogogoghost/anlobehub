@@ -55,8 +55,8 @@ import cc.jaxy.anlobehub.core.designsystem.component.relativeTimeText
 import cc.jaxy.anlobehub.core.designsystem.theme.spacing
 
 /**
- * Assistant message: borderless, mirroring web mobile. Thinking trace and
- * tool calls fold into collapsible cards; body markdown renders directly.
+ * Assistant message: borderless, with expandable reasoning and markdown.
+ *
  */
 @Composable
 fun AssistantMessageRow(
@@ -233,64 +233,6 @@ private fun ThinkingCard(
     }
 }
 
-/** Folded tool-call record (memories/search/RAG dumps stay out of the flow). */
-@Composable
-fun ToolMessageRow(
-    message: ChatMessage,
-    modifier: Modifier = Modifier,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val spacing = MaterialTheme.spacing
-    val summary = toolSummary(message.content)
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        modifier = modifier.fillMaxWidth(),
-        onClick = { expanded = !expanded },
-    ) {
-        Column(modifier = Modifier.padding(horizontal = spacing.m, vertical = spacing.s)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(spacing.s),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Build,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp),
-                )
-                Text(
-                    text = summary,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                )
-                Icon(
-                    imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-            if (expanded) {
-                ToolContent(
-                    content = message.content,
-                    modifier = Modifier.padding(top = spacing.s),
-                )
-            }
-        }
-    }
-}
-
-private fun toolSummary(content: String): String {
-    val firstTag = Regex("<(\\w+)").find(content)?.groupValues?.getOrNull(1)
-    return when {
-        firstTag == null -> content.lineSequence().firstOrNull()?.take(60) ?: "Tool"
-        else -> "Tool: $firstTag"
-    }
-}
 
 @Composable
 private fun ThinkingDots(modifier: Modifier = Modifier) {
@@ -355,58 +297,6 @@ private fun MessageActions(
     }
 }
 
-/**
- * Collapsed execution trace ("Ran N steps"), mirroring web. Tapping expands
- * the prelude + tool rows inline.
- */
-@Composable
-fun StepsRow(
-    steps: List<ChatMessage>,
-    modifier: Modifier = Modifier,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val spacing = MaterialTheme.spacing
-    Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { expanded = !expanded }
-                .padding(vertical = spacing.xs),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(spacing.s),
-        ) {
-            Text(
-                text = stringResource(R.string.chat_steps_ran, steps.size),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-            )
-            Icon(
-                imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        if (expanded) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(spacing.xs),
-                modifier = Modifier.padding(top = spacing.xs),
-            ) {
-                steps.forEach { step ->
-                    when (step.role) {
-                        "tool", "function" -> ToolMessageRow(message = step)
-                        else -> Text(
-                            text = step.content,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
 
 /** Parsed web citation from `[^n]: [title](url)` definitions. */
 data class ChatCitation(val index: String, val title: String, val url: String) {
@@ -550,13 +440,9 @@ private fun LinkPreviewSheet(
     }
 }
 
-/**
- * Live turn: sealed prelude/tool steps collapse into a steps row while the
- * current answer streams borderless beneath.
- */
+/** Renders the active assistant response with its live reasoning trace. */
 @Composable
 fun StreamingTurn(
-    steps: List<ChatViewModel.StreamSegment>,
     agentName: String?,
     agentAvatar: String? = null,
     streamingText: String,
@@ -565,9 +451,6 @@ fun StreamingTurn(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
-        if (steps.isNotEmpty()) {
-            StreamingStepsRow(steps = steps)
-        }
         AssistantMessageRow(
             message = ChatMessage(role = "assistant"),
             agentName = agentName,
@@ -580,182 +463,4 @@ fun StreamingTurn(
     }
 }
 
-@Composable
-private fun StreamingStepsRow(
-    steps: List<ChatViewModel.StreamSegment>,
-    modifier: Modifier = Modifier,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val spacing = MaterialTheme.spacing
-    val running = steps.any { it.toolName != null && !it.toolDone }
-    Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { expanded = !expanded }
-                .padding(vertical = spacing.xs),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(spacing.s),
-        ) {
-            if (running) {
-                ThinkingDots()
-            }
-            Text(
-                text = if (running) {
-                    stringResource(R.string.chat_steps_running, steps.size)
-                } else {
-                    stringResource(R.string.chat_steps_ran, steps.size)
-                },
-                style = MaterialTheme.typography.labelMedium,
-                color = if (running) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                modifier = Modifier.weight(1f),
-            )
-            Icon(
-                imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        if (expanded) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(spacing.xs),
-                modifier = Modifier.padding(top = spacing.xs),
-            ) {
-                steps.forEach { step ->
-                    if (step.toolName != null) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(spacing.s),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Build,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp),
-                            )
-                            Text(
-                                text = step.toolName.ifBlank {
-                                    stringResource(R.string.chat_tool_unnamed)
-                                } + if (step.toolDone) "" else " …",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    } else {
-                        Text(
-                            text = step.text,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
 
-/** Renders tool XML (`searchResults`/`crawlResults`/`memories`) as entries. */
-@Composable
-private fun ToolContent(content: String, modifier: Modifier = Modifier) {
-    val spacing = MaterialTheme.spacing
-    val entries = remember(content) { parseToolEntries(content) }
-    if (entries.isEmpty()) {
-        Text(
-            text = content,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = modifier,
-        )
-        return
-    }
-    var preview by remember { mutableStateOf<ChatCitation?>(null) }
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(spacing.xs),
-    ) {
-        entries.forEach { entry ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(
-                        if (entry.url != null) {
-                            Modifier.clickable {
-                                preview = ChatCitation(
-                                    index = "",
-                                    title = entry.title,
-                                    url = entry.url,
-                                )
-                            }
-                        } else {
-                            Modifier
-                        },
-                    ),
-                horizontalArrangement = Arrangement.spacedBy(spacing.s),
-            ) {
-                Text(
-                    text = "•",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = entry.title,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (entry.url != null) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    entry.detail?.takeIf { it.isNotBlank() }?.let {
-                        Text(
-                            text = it,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
-        }
-    }
-    preview?.let {
-        LinkPreviewSheet(citation = it, onDismiss = { preview = null })
-    }
-}
-
-private data class ToolEntry(val title: String, val url: String?, val detail: String?)
-
-private fun parseToolEntries(content: String): List<ToolEntry> {
-    val out = mutableListOf<ToolEntry>()
-    // <item title=".." url="..">body</item> / <page url="..">body</page>
-    Regex("""<(item|page)\s+([^>]+)>([\s\S]*?)</\1>""").findAll(content).forEach { m ->
-        val attrs = m.groupValues[2]
-        val title = Regex("""title="([^"]*)"""").find(attrs)?.groupValues?.getOrNull(1).orEmpty()
-        val url = Regex("""url="([^"]*)"""").find(attrs)?.groupValues?.getOrNull(1)
-            ?.takeIf { it.startsWith("http") }
-        val body = m.groupValues[3].replace(Regex("<[^>]+>"), " ").replace(Regex("\\s+"), " ").trim()
-        if (title.isNotBlank() || url != null) {
-            out.add(ToolEntry(title.ifBlank { url ?: "" }, url, body.take(200).takeIf { it.isNotBlank() }))
-        }
-    }
-    // <status>..</status> / <memories query=".."> wrapper info
-    Regex("""<status>([\s\S]*?)</status>""").findAll(content).forEach { m ->
-        val text = m.groupValues[1].trim()
-        if (text.isNotBlank()) out.add(0, ToolEntry(text, null, null))
-    }
-    if (out.isEmpty()) {
-        Regex("""<(\w+)\s+query="([^"]*)"""").findAll(content).forEach { m ->
-            out.add(ToolEntry("${m.groupValues[1]}: ${m.groupValues[2]}", null, null))
-        }
-    }
-    return out
-}

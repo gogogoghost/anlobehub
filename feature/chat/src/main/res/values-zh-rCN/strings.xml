@@ -3,7 +3,7 @@
     <string name="chat_attach_read_failed">读取附件失败，请重试</string>
     <string name="chat_attach_too_large_format">文件超过 %1$dMB，已拒绝</string>
     <string name="chat_attach_fallback">附件</string>
-    <string name="chat_attach_uploading">上传中…</string>
+    <string name="chat_attach_uploading">正在保存到本地…</string>
     <string name="chat_action_attach">添加附件</string>
     <string name="chat_input_hint">输入消息…</string>
     <string name="chat_action_stop">停止</string>
@@ -16,11 +16,8 @@
     <string name="chat_empty_message">（空消息）</string>
     <string name="chat_default_title">会话</string>
     <string name="chat_default_model">默认模型</string>
-    <string name="chat_no_server">未配置服务器地址，请先设置服务器地址</string>
-    <string name="chat_no_stream_task">服务端未返回流式任务，请重试</string>
-    <string name="chat_gateway_missing">网关未配置，请检查服务端网关配置</string>
-    <string name="chat_session_expired_reenter">登录已过期，请重新进入会话</string>
     <string name="chat_stream_interrupted">流式输出中断，请重试</string>
+    <string name="chat_model_required">请先在设置中添加服务商并获取模型，再选择模型后发送消息。</string>
     <string name="chat_agent_history">话题历史</string>
 
     <string name="chat_thinking">思考中…</string>
@@ -29,10 +26,6 @@
 
     <string name="chat_thought_secs">已深度思考 %.1f 秒</string>
 
-    <string name="chat_steps_ran">执行了 %1$d 个步骤</string>
-
-    <string name="chat_steps_running">正在执行 %1$d 个步骤…</string>
-    <string name="chat_tool_unnamed">工具调用</string>
 
     <string name="chat_topic_search_hint">搜索会话</string>
     <string name="chat_topic_no_match">没有匹配的会话</string>
